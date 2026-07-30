@@ -1,0 +1,50 @@
+
+
+//Only read-only operation on textures are allowed
+boolean isBooleanTexture(Image(t, **) texture) {
+
+    return t == boolean;
+}
+
+//Allow operations that modify the given textures
+operation clip(Image(RGBA, *, *) image, Image(boolean, *, *) mask) {
+
+    //loop by exploded indices
+    for ([i, j] : image) {
+        //out of bounds indexing results in the "null" value appropriate for the image format ("false" in this case)
+        if (!mask[i][j]) {
+            image[i][j] = 0;
+        }
+    }
+    //loop by positions (v = [i, j])
+    for (v : image) {
+        //format's channels referenced object-style ("channel" is the type representing the color value aka float in range [0;1])
+        channel pixel = image[v].a;
+        //multichannel copy
+        image[v].rgb = [pixel, pixel, pixel];
+        image[v].a = 1;
+    }
+}
+//Implicit type definitions "t", "w", "h" must match for each of "a", "b", "c" and "dst"
+operation fma(Image(t, w, h) a, Image(t, w, h) b, Image(t, w, h) c, Image(t, w, h) dst) {
+
+    dst = a * b + c;
+}
+
+Image(RGBA, 256, 256) image = empty;
+Image(*, *, *) mask = file("mask.png");
+
+if (!isBooleanTexture(mask)) {
+    print("Error: the file \"mask.png\" is not a boolean texture");
+    //terminates execution and revert every operation done so far
+    abort;
+}
+
+//run-time error if the type of "mask" is not compatible with the type of the second argument of "clip"
+clip(image, mask);
+
+//write "image" to disk in file "out.png"
+write image "out.png";
+
+//show grafically the image in a new window
+show image;
