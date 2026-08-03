@@ -1,0 +1,72 @@
+
+Program ::= Configs? Code? EOF
+
+Configs ::= Config WS* Configs?
+Config ::= "#" ConfigName INLINE_WS* ConfigValue INLINE_WS* EOL
+ConfigName ::= Identifier
+ConfigValue ::= (Identifier | UINT)
+
+Code ::= (Function | Operation | Command) WS* Code?
+
+Function ::= FunctionReturnType WS+ Identifier WS* "(" WS* args WS* ")" WS* "{" FunctionBody? WS* "}"
+Operation ::= "operation" WS+ Identifier WS* "(" WS* args WS* ")" WS* "{" OperationBody? WS* "}"
+
+args ::= (( arg WS* "," WS* )* arg)?
+arg ::= Type WS+ Identifier
+
+FunctionReturnType ::= Type | "void"
+FunctionBody ::= WS* FunctionCommand FunctionBody?
+OperationBody ::= WS* OperationCommand FunctionBody?
+
+FunctionCommand ::= ReturnValueCommand | ReturnVoidCommand | Command
+OperationCommand ::= ReturnVoidCommand | Command
+Command ::= Decl | Assignment | Call | ForLike | IfLike
+
+ReturnValueCommand ::= "return" WS+ Expr WS* ";"
+ReturnVoidCommand ::= "return" WS* ";"
+Decl ::= Type WS+ Identifier WS* ("=" WS* Expr WS* )? ";"
+Assignment ::= Identifier AssignOp Expr ";"
+Call ::= "wip;"
+ForLike ::= "wip;"
+IfLike ::= "wip;"
+
+Expr ::= EqualsExpr
+
+EqualsExpr ::= RValue WS* "==" WS* RValue | RValue
+
+AssignOp ::= BinaryOp "="
+BinaryOp ::= "+" | "-" | "*" | "&" | "|"
+UnaryOp ::= "!"
+
+Type ::= FormatType | ImageType
+FormatType ::= "RGBA" | "RGB" | ScalarType
+ScalarType ::= "boolean" | "int" | "float" | "channel"
+ImageType ::= "Image" WS* "(" WS* imageTypeArgs WS* ")"
+imageTypeArgs ::= "**" | (FormatType | Identifier | "*") WS* "," WS* imageTypeSizeArgs
+imageTypeSizeArgs ::= "**" | (RValue | "*") (WS* "," WS* imageTypeSizeArgs)?
+
+string ::= '"' [^"]* '"'
+
+Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]*
+LValue ::= Identifier
+RValue ::= ScalarValue | FormatType | Identifier
+ScalarValue ::= BOOLEAN | INT | FLOAT
+
+BOOLEAN ::= "false" | "true"
+FLOAT ::= [+-]? [0-9]* ANY? [0-9]+ ([eE] [+-]? [0-9]+)?
+INT ::= [+-] UINT
+UINT ::= [0-9]+
+
+KEYWORD ::= "false" | "true" | FormatType | "operation"
+    | "void" | "return" | "if" | "for"
+
+WS ::= Comment | MultiLineComment | [#x20#x09#x0A#x0D]+
+INLINE_WS ::= Comment | SingleLineComment | [#x20#x09]+
+
+Comment ::= "//" (!EOL ANY)*
+MultiLineComment ::= "/*" (!"*/" ANY)* "*/"
+SingleLineComment ::= "/*" (!"*/" !EOL ANY)* "*/"
+
+EOL ::= (!#x0D #x0A | #x0D #x0A) EOF? | EOF
+ANY ::= [#x00-#xFFFF]
+any0 ::= [#x00-#xFFFF]

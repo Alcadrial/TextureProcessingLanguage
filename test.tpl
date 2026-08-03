@@ -1,4 +1,4 @@
-
+#onChannelOverflow error
 
 //Only read-only operation on textures are allowed
 boolean isBooleanTexture(Image(t, **) texture) {
@@ -31,6 +31,13 @@ operation fma(Image(t, w, h) a, Image(t, w, h) b, Image(t, w, h) c, Image(t, w, 
     dst = a * b + c;
 }
 
+operation merge(Image(t0, w, h) a, Image(t1, w, h) b, (t0, t1) -> t0 blend) {
+    
+    for (v : [0, 0]->[w, h]) {
+        a[v] = blend(a[v], b[v]);
+    }
+}
+
 Image(RGBA, 256, 256) image = empty;
 Image(*, *, *) mask = file("mask.png");
 
@@ -40,7 +47,7 @@ if (!isBooleanTexture(mask)) {
     abort;
 }
 
-//run-time error if the type of "mask" is not compatible with the type of the second argument of "clip"
+//run-time error if the type of each parameter is not compatible with the definition of "clip"
 clip(image, mask);
 
 //write "image" to disk in file "out.png"

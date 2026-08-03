@@ -1,0 +1,7 @@
+
+Program ::= Config* (Function | Operation | Command ";" WS*)* EOF*
+Program ::= (wip | nyi | beta) [#x00-#xFFFF]*
+
+wip ::= "wip"
+nyi ::= "nyi"
+beta ::= "beta"

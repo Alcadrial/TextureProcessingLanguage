@@ -1,0 +1,62 @@
+
+Program ::= Configs? Code? EOF?
+
+Configs ::= Config WS* Configs?
+Config ::= "#" ConfigName INLINE_WS* ConfigValue INLINE_WS* EOL
+ConfigName ::= Identifier
+ConfigValue ::= (Identifier | UINT)
+
+Code ::= (Function | Operation | Command ";" WS*) Code?
+
+Function ::= Type WS+ Identifier WS* "(" WS* args WS* ")" WS* body
+Operation ::= "operation" WS+ Identifier WS* "(" WS* args WS* ")" WS* body
+
+args ::= (( arg WS* "," WS* )* arg)?
+arg ::= Type WS+ Identifier
+
+body ::= "{" WS* (Command WS* ";" WS*)* "}" WS*
+
+Command ::= decl | assignment | call | forLike | ifLike
+
+decl ::= Type WS+ Identifier ("=" expr )?
+assignment ::= Identifier assignOp expr
+call ::= "wip"
+forLike ::= "wip"
+ifLike ::= "wip"
+
+expr ::= "wip"
+
+assignOp ::= binaryOp "="
+binaryOp ::= "+" | "-" | "*" | "&" | "|"
+unaryOp ::= "!"
+
+constValue ::= constScalarValue | FormatType
+constScalarValue ::= BOOLEAN | INT | FLOAT
+
+Type ::= FormatType | ImageType
+ScalarType ::= "boolean" | "int" | "float" | "channel"
+FormatType ::= "RGBA" | "RGB" | ScalarType
+ImageType ::= "Image" WS* "(" WS* imageTypeArgs WS* ")"
+imageTypeArgs ::= "**" | (FormatType | Identifier | "*") WS* "," WS* imageTypeSizeArgs
+imageTypeSizeArgs ::= "**" | (constScalarValue | Identifier | "*") (WS* "," WS* imageTypeSizeArgs)?
+
+string ::= '"' [^"]* '"'
+
+Identifier ::= [a-zA-Z] [a-zA-Z0-9]*
+
+BOOLEAN ::= "false" | "true"
+FLOAT ::= [+-]? [0-9]* ANY? [0-9]+ ([eE] [+-]? [0-9]+)?
+INT ::= [+-] UINT
+UINT ::= [0-9]+
+
+WS ::= Comment | MultiLineComment | [#x20#x09#x0A#x0D]+
+INLINE_WS ::= [#x20#x09]+
+ws ::= Comment | MultiLineComment | [#x20#x09#x0A#x0D]+
+
+Comment ::= "//" (!EOL ANY)*
+MultiLineComment ::= "/*" (!"*/" ANY)* "*/"
+
+EOL ::= (!#x0D #x0A | #x0D #x0A) EOF? | EOF
+EOL1 ::= #x0A {pin=2}
+ANY ::= [#x00-#xFFFF]
+any0 ::= [#x00-#xFFFF]
