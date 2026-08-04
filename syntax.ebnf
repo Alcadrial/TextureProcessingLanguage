@@ -1,65 +1,109 @@
 
-Program ::= Configs? Code? EOF
+Program ::= Configs? Code? WS* EOF
 
-Configs ::= Config WS* Configs?
+Configs ::= WS* Config Configs?
 Config ::= "#" ConfigName INLINE_WS* ConfigValue INLINE_WS* EOL
-ConfigName ::= Identifier
-ConfigValue ::= (Identifier | UINT)
+ConfigName ::= [a-zA-Z] [a-zA-Z0-9]*
+ConfigValue ::= [a-zA-Z] [a-zA-Z0-9]* | [0-9]+
 
-Code ::= (Function | Operation | Command) WS* Code?
+Code ::= WS* (Function | Operation | Command) Code?
 
-Function ::= FunctionReturnType WS+ Identifier WS* "(" WS* args WS* ")" WS* "{" FunctionBody? WS* "}"
-Operation ::= "operation" WS+ Identifier WS* "(" WS* args WS* ")" WS* "{" OperationBody? WS* "}"
+Function ::= ReturnType WS+ Identifier WS* args WS* Closure
+Operation ::= "operation" WS+ Identifier WS* args WS* Closure
 
-args ::= (( arg WS* "," WS* )* arg)?
+args ::= "(" (arg WS* "," WS*)* arg WS* ")"
 arg ::= Type WS+ Identifier
 
-FunctionReturnType ::= Type | "void"
-FunctionBody ::= WS* FunctionCommand FunctionBody?
-OperationBody ::= WS* OperationCommand FunctionBody?
+/*well formed*/
 
-FunctionCommand ::= ReturnValueCommand | ReturnVoidCommand | Command
-OperationCommand ::= ReturnVoidCommand | Command
-Command ::= Decl | Assignment | Call | ForLike | IfLike
+ReturnType ::= Type | "void"
+Closure ::= "{" Commands? WS* "}"
+Body ::= Closure | Command
+Commands ::= WS* Command Commands?
 
-ReturnValueCommand ::= "return" WS+ Expr WS* ";"
-ReturnVoidCommand ::= "return" WS* ";"
-Decl ::= Type WS+ Identifier WS* ("=" WS* Expr WS* )? ";"
-Assignment ::= Identifier AssignOp Expr ";"
+Command ::= ReturnCommand | Decl | Assignment | Call | ForLike | IfLike | Closure
+
+ReturnCommand ::= "return" (WS+ Expr)? WS* ";"
+Decl ::= Type WS+ Identifier WS* ("=" WS* Expr WS*)? ";"
+Assignment ::= AssignExpr WS* AssignOp WS* Expr WS* ";"
 Call ::= "wip;"
-ForLike ::= "wip;"
-IfLike ::= "wip;"
+
+ForLike ::= "for" WS* "(" WS* LoopVar WS* ":" WS* Iterable ")" WS* ForBody
+ForBody ::= "{" ForCommands? WS* "}" | ForCommand
+ForCommands ::= WS* ForCommand ForCommands?
+ForCommand ::= Command | "break" WS* ";" | "continue" WS* ";"
+LoopVar ::= Identifier | MultiIndexLoopVar
+MultiIndexLoopVar ::= "[" WS* MultiIndexLoopVarArgs "]"
+MultiIndexLoopVarArgs ::= Identifier WS* ("," WS* MultiIndexLoopVarArgs)?
+Iterable ::= Expr
+
+IfLike ::= "if" WS* "(" WS* Expr WS* ")" WS* Body (WS* ElseLike)?
+ElseLike ::= "else" WS* Body
 
 Expr ::= EqualsExpr
 
-EqualsExpr ::= RValue WS* "==" WS* RValue | RValue
+EqualsExpr          ::= UnaryExpr WS* "==" WS* Expr | UnequalsExpr
+UnequalsExpr        ::= UnaryExpr WS* "!=" WS* Expr | GreatherEqualsExpr
+GreatherEqualsExpr  ::= UnaryExpr WS* ">=" WS* Expr | GreatherExpr
+GreatherExpr        ::= UnaryExpr WS* ">"  WS* Expr | LesserEqualsExpr
+LesserEqualsExpr    ::= UnaryExpr WS* "<=" WS* Expr | LesserExpr
+LesserExpr          ::= UnaryExpr WS* "<"  WS* Expr | AndExpr
+AndExpr             ::= UnaryExpr WS* "&&" WS* Expr | OrExpr
+OrExpr              ::= UnaryExpr WS* "||" WS* Expr | AddExpr
+AddExpr             ::= UnaryExpr WS* "+"  WS* Expr | MultiplyExpr
+MultiplyExpr        ::= UnaryExpr WS* "*"  WS* Expr | ExtractExpr
+ExtractExpr         ::= UnaryExpr WS* "<@" WS* Expr | EmbedExpr
+EmbedExpr           ::= UnaryExpr WS* ">@" WS* Expr | RangedExpr
+RangedExpr          ::= UnaryExpr WS* "@"  WS* Expr | UnaryExpr
+UnaryExpr           ::= (UnaryOp WS*)? SwizzleExpr
+SwizzleExpr         ::= IndexExpr Swizzle?
+IndexExpr           ::= BracketExpr (WS* MultiIndexExpr)?
+BracketExpr         ::= "(" WS* Expr WS* ")" | MultiIndexExpr
+MultiIndexExpr      ::= "[" WS* MultiIndexExprArgs "]" | RValue
+MultiIndexExprArgs  ::= Expr WS* ("," WS* MultiIndexExprArgs)?
 
-AssignOp ::= BinaryOp "="
-BinaryOp ::= "+" | "-" | "*" | "&" | "|"
-UnaryOp ::= "!"
+AssignExpr          ::= AssignSwizzleExpr 
+AssignSwizzleExpr   ::= AssignIndexExpr Swizzle?
+AssignIndexExpr     ::= Identifier (WS* MultiIndexExpr)?
 
-Type ::= FormatType | ImageType
+AssignOp ::= BinaryOp? "="
+BinaryOp ::= "+" | "-" | "*" | "&&" | "||" | "<@" | ">@" | "@"
+UnaryOp  ::= "-" | "!" | "*"
+
+Swizzle             ::= "." Swizzle0?
+Swizzle0            ::= [rgba] Swizzle1?
+Swizzle1            ::= [rgba] Swizzle2?
+Swizzle2            ::= [rgba] Swizzle3?
+Swizzle3            ::= [rgba]
+
+Type ::= VectorialType | ImageType
+VectorialType ::= FormatType | "range" | "multi"
 FormatType ::= "RGBA" | "RGB" | ScalarType
 ScalarType ::= "boolean" | "int" | "float" | "channel"
-ImageType ::= "Image" WS* "(" WS* imageTypeArgs WS* ")"
-imageTypeArgs ::= "**" | (FormatType | Identifier | "*") WS* "," WS* imageTypeSizeArgs
-imageTypeSizeArgs ::= "**" | (RValue | "*") (WS* "," WS* imageTypeSizeArgs)?
+ImageType ::= "Image" (WS* "(" WS* imageTypeArgs WS* ")")?
+imageTypeArgs ::= "**" | imageTypeArg WS* "," WS* imageTypeSizeArgs
+imageTypeArg ::= FormatType | Identifier | "*"
+imageTypeSizeArgs ::= "**" | imageTypeSizeArg (WS* "," WS* imageTypeSizeArgs)?
+imageTypeSizeArg ::= RValue | "*"
 
 string ::= '"' [^"]* '"'
 
-Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]*
-LValue ::= Identifier
-RValue ::= ScalarValue | FormatType | Identifier
+Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]* WS*
+LValue ::= RLValue
+RValue ::= ScalarValue | VectorialType | RLValue
+RLValue ::= Identifier
 ScalarValue ::= BOOLEAN | INT | FLOAT
+IndexableValue ::= !ScalarValue RValue
 
 BOOLEAN ::= "false" | "true"
-FLOAT ::= [+-]? [0-9]* ANY? [0-9]+ ([eE] [+-]? [0-9]+)?
-INT ::= [+-] UINT
+FLOAT ::= [+-]? [0-9]* "."? [0-9]+ ([eE] [+-]? [0-9]+)?
+INT ::= [+-]? UINT
 UINT ::= [0-9]+
 
-KEYWORD ::= "false" | "true" | FormatType | "operation"
-    | "void" | "return" | "if" | "for"
+KEYWORD ::= "false" | "true" | VectorialType | "operation"
+    | "void" | "return" | "if" | "else" | "for" | "break" | "continue"
 
+IT ::= ![a-zA-Z0-9] ANY
 WS ::= Comment | MultiLineComment | [#x20#x09#x0A#x0D]+
 INLINE_WS ::= Comment | SingleLineComment | [#x20#x09]+
 

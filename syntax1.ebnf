@@ -1,7 +1,5 @@
 
-Program ::= Config* (Function | Operation | Command ";" WS*)* EOF*
-Program ::= (wip | nyi | beta) [#x00-#xFFFF]*
+Program ::= Header? Body
 
-wip ::= "wip"
-nyi ::= "nyi"
-beta ::= "beta"
+Header ::= "header" !"§"
+Body ::= [#x00-#xFFFF]*

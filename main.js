@@ -13,8 +13,13 @@ function printAST(token, level = 0) {
 }
 
 
+var syntaxFilename = "expr.syntax.ebnf";
+syntaxFilename = "syntax.ebnf";
+var codeFilename = "expr.tpl";
+codeFilename = "test2.tpl";
+
 try {
-    const syntaxContent = await readFile("syntax.ebnf");
+    const syntaxContent = await readFile(syntaxFilename);
     const grammar = syntaxContent.toString() + "\r\n";
     const rules = Grammars.Custom.getRules(grammar);
 
@@ -22,7 +27,7 @@ try {
 
     console.log("Reading syntax...");
 
-    const ast = parser.getAST((await readFile("test2.tpl")).toString());
+    const ast = parser.getAST((await readFile(codeFilename)).toString());
 
     if (!ast) {
         console.log("Failed to parse file");
