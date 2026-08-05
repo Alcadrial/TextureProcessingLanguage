@@ -66,7 +66,7 @@ IndexExpr           ::= CallExpr (WS* MultiIndexExpr)?
 CallExpr            ::= Identifier WS* CallArgs | RangeExpr
 RangeExpr           ::= "[" WS* MultiIndexExprArgs "]" WS* "->" WS* "[" WS* MultiIndexExprArgs "]" | BracketExpr
 BracketExpr         ::= "(" WS* Expr WS* ")" | MultiIndexExpr
-MultiIndexExpr      ::= "[" WS* MultiIndexExprArgs "]" | RValue
+MultiIndexExpr      ::= "[" WS* MultiIndexExprArgs "]" | Value
 MultiIndexExprArgs  ::= Expr WS* ("," WS* MultiIndexExprArgs)?
 
 AssignExpr          ::= AssignSwizzleExpr 
@@ -91,33 +91,28 @@ ImageType         ::= "Image" (WS* "(" WS* ImageTypeArgs WS* ")")?
 ImageTypeArgs     ::= "**" | ImageTypeArg WS* "," WS* ImageTypeSizeArgs
 ImageTypeArg      ::= FormatType | Identifier | "*"
 ImageTypeSizeArgs ::= "**" | ImageTypeSizeArg (WS* "," WS* ImageTypeSizeArgs)?
-ImageTypeSizeArg  ::= RValue | "*"
+ImageTypeSizeArg  ::= Value | "*"
 
 String ::= '"' [^"]* '"' | "'" [^']* "'"
 
 Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]* WS*
-LValue ::= RLValue
-RValue ::= ScalarValue | VectorialType | RLValue | String
-RLValue ::= Identifier
-ScalarValue ::= BOOLEAN | INT | FLOAT
-IndexableValue ::= !ScalarValue RValue
+Value ::= ScalarValue | Identifier | String
+ScalarValue ::= Boolean | Int | Float
 
-BOOLEAN ::= "false" | "true"
-FLOAT ::= [+-]? [0-9]* "."? [0-9]+ ([eE] [+-]? [0-9]+)?
-INT ::= [+-]? UINT
+Boolean ::= "false" | "true"
+Float ::= [+-]? [0-9]* "."? [0-9]+ ([eE] [+-]? [0-9]+)?
+Int ::= [+-]? UINT
 UINT ::= [0-9]+
 
 KEYWORD ::= "false" | "true" | VectorialType | "abort"
     | "void" | "return" | "if" | "else" | "for" | "break" | "continue"
 
-IT ::= ![a-zA-Z0-9] ANY
 WS ::= Comment | MultiLineComment | [#x20#x09#x0A#x0D]+
-INLINE_WS ::= Comment | SingleLineComment | [#x20#x09]+
+INLINE_WS ::= Comment | InlineComment | [#x20#x09]+
 
 Comment ::= "//" (!EOL ANY)*
 MultiLineComment ::= "/*" (!"*/" ANY)* "*/"
-SingleLineComment ::= "/*" (!"*/" !EOL ANY)* "*/"
+InlineComment ::= "/*" (!"*/" !EOL ANY)* "*/"
 
 EOL ::= (!#x0D #x0A | #x0D #x0A) EOF? | EOF
 ANY ::= [#x00-#xFFFF]
-any0 ::= [#x00-#xFFFF]
