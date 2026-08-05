@@ -2,13 +2,13 @@
 import { readFile } from "node:fs/promises";
 import { Grammars, Parser } from "ebnf";
 
-function printAST(token, level = 0) {
+function printParseTree(token, level = 0) {
     console.log(
         '         ' + '  '.repeat(level) + `|-${token.type}${token.children.length == 0 ? '=' + token.text : ''}`
     );
     token.children &&
         token.children.forEach(c => {
-            printAST(c, level + 1);
+            printParseTree(c, level + 1);
         });
 }
 
@@ -16,7 +16,7 @@ function printAST(token, level = 0) {
 var syntaxFilename = "expr.syntax.ebnf";
 syntaxFilename = "syntax.ebnf";
 var codeFilename = "expr.tpl";
-codeFilename = "test2.tpl";
+codeFilename = "test.tpl";
 
 try {
     const syntaxContent = await readFile(syntaxFilename);
@@ -33,7 +33,7 @@ try {
         console.log("Failed to parse file");
     }
     else {
-        printAST(ast);
+        printParseTree(ast);
     }
 }
 catch (err) {
