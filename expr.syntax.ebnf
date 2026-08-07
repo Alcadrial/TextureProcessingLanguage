@@ -2,78 +2,78 @@ Program ::= WS* Assignment WS*
 
 Assignment ::= AssignExpr WS* AssignOp WS* Expr WS* ";"
 
-Expr ::= EqualsExpr
+Expr ::= ConcatExpr
 
+ConcatExpr          ::= UnaryExpr WS* "|"  WS* Expr | EqualsExpr
 EqualsExpr          ::= UnaryExpr WS* "==" WS* Expr | UnequalsExpr
 UnequalsExpr        ::= UnaryExpr WS* "!=" WS* Expr | GreatherEqualsExpr
 GreatherEqualsExpr  ::= UnaryExpr WS* ">=" WS* Expr | GreatherExpr
 GreatherExpr        ::= UnaryExpr WS* ">"  WS* Expr | LesserEqualsExpr
 LesserEqualsExpr    ::= UnaryExpr WS* "<=" WS* Expr | LesserExpr
 LesserExpr          ::= UnaryExpr WS* "<"  WS* Expr | AndExpr
-AndExpr             ::= UnaryExpr WS* "&&" WS* Expr | OrExpr
-OrExpr              ::= UnaryExpr WS* "||" WS* Expr | AddExpr
-AddExpr             ::= UnaryExpr WS* "+"  WS* Expr | MultiplyExpr
-MultiplyExpr        ::= UnaryExpr WS* "*"  WS* Expr | ExtractExpr
+AndExpr             ::= UnaryExpr WS* "&&" WS* Expr | LogicalOrExpr
+LogicalOrExpr       ::= UnaryExpr WS* "||" WS* Expr | AddExpr
+AddExpr             ::= UnaryExpr WS* "+"  WS* Expr | SubtractExpr
+SubtractExpr        ::= UnaryExpr WS* "-"  WS* Expr | MultiplyExpr
+MultiplyExpr        ::= UnaryExpr WS* "*"  WS* Expr | DivideExpr
+DivideExpr          ::= UnaryExpr WS* "/"  WS* Expr | RemainderExpr
+RemainderExpr       ::= UnaryExpr WS* "%"  WS* Expr | ExtractExpr
 ExtractExpr         ::= UnaryExpr WS* "<@" WS* Expr | EmbedExpr
 EmbedExpr           ::= UnaryExpr WS* ">@" WS* Expr | RangedExpr
 RangedExpr          ::= UnaryExpr WS* "@"  WS* Expr | UnaryExpr
-UnaryExpr           ::= (UnaryOp WS*)? IndexExpr
-IndexExpr           ::= BracketExpr (WS* MultiIndexExpr)?
+UnaryExpr           ::= (UnaryOp WS*)? SwizzleExpr
+SwizzleExpr         ::= IndexExpr Swizzle?
+IndexExpr           ::= CallExpr (WS* MultiIndexExpr)?
+CallExpr            ::= Identifier WS* CallArgs | RangeExpr
+RangeExpr           ::= "[" WS* MultiIndexExprArgs "]" WS* "->" WS* "[" WS* MultiIndexExprArgs "]" | BracketExpr
 BracketExpr         ::= "(" WS* Expr WS* ")" | MultiIndexExpr
-MultiIndexExpr      ::= "[" WS* MultiIndexExprArgs "]" | RValue
+MultiIndexExpr      ::= "[" WS* MultiIndexExprArgs "]" | Value
 MultiIndexExprArgs  ::= Expr WS* ("," WS* MultiIndexExprArgs)?
 
-AssignExpr          ::= AssignIndexExpr 
+AssignExpr          ::= AssignSwizzleExpr 
+AssignSwizzleExpr   ::= AssignIndexExpr Swizzle?
 AssignIndexExpr     ::= Identifier (WS* MultiIndexExpr)?
 
 AssignOp ::= BinaryOp? "="
 BinaryOp ::= "+" | "-" | "*" | "&&" | "||" | "<@" | ">@" | "@"
 UnaryOp  ::= "-" | "!" | "*"
 
-Type ::= VectorialType | ImageType
-VectorialType ::= FormatType | RANGE_TYPE | MULTI_TYPE
-FormatType ::= RGBA_TYPE | RGB_TYPE | ScalarType
-ScalarType ::= BOOLEAN_TYPE | INT_TYPE | FLOAT_TYPE | CHANNEL_TYPE
-ImageType ::= "Image" WS* "(" WS* imageTypeArgs WS* ")"
-imageTypeArgs ::= "**" | imageTypeArg WS* "," WS* imageTypeSizeArgs
-imageTypeArg ::= FormatType | Identifier | "*"
-imageTypeSizeArgs ::= "**" | imageTypeSizeArg (WS* "," WS* imageTypeSizeArgs)?
-imageTypeSizeArg ::= RValue | "*"
+Swizzle  ::= "." Swizzle0?
+Swizzle0 ::= [rgba] Swizzle1?
+Swizzle1 ::= [rgba] Swizzle2?
+Swizzle2 ::= [rgba] Swizzle3?
+Swizzle3 ::= [rgba]
 
-string ::= '"' [^"]* '"'
+Type              ::= VectorialType | ImageType
+VectorialType     ::= FormatType | "range" | "multi"
+FormatType        ::= "RGBA" | "RGB" | ScalarType
+ScalarType        ::= "boolean" | "int" | "float" | "channel"
+ImageType         ::= "Image" (WS* "(" WS* ImageTypeArgs WS* ")")?
+ImageTypeArgs     ::= "**" | ImageTypeArg WS* "," WS* ImageTypeSizeArgs
+ImageTypeArg      ::= FormatType | Identifier | "*"
+ImageTypeSizeArgs ::= "**" | ImageTypeSizeArg (WS* "," WS* ImageTypeSizeArgs)?
+ImageTypeSizeArg  ::= Value | "*"
+
+String ::= '"' [^"]* '"' | "'" [^']* "'"
 
 Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]* WS*
-LValue ::= RLValue
-RValue ::= ScalarValue | VectorialType | RLValue
-RLValue ::= Identifier
-ScalarValue ::= BOOLEAN | INT | FLOAT
-IndexableValue ::= !ScalarValue RValue
+Value ::= ScalarValue | Identifier | String
+ScalarValue ::= Boolean | Int | Float
 
-BOOLEAN ::= "false" | "true"
-FLOAT ::= [+-]? [0-9]* [.]? [0-9]+ ([eE] [+-]? [0-9]+)?
-INT ::= [+-]? UINT
+Boolean ::= "false" | "true"
+Float ::= [+-]? [0-9]* "."? [0-9]+ ([eE] [+-]? [0-9]+)?
+Int ::= [+-]? UINT
 UINT ::= [0-9]+
 
-RGBA_TYPE ::= "RGBA" WS*
-RGB_TYPE ::= "RGB" WS*
-BOOLEAN_TYPE ::= "boolean" WS*
-INT_TYPE ::= "int" WS*
-FLOAT_TYPE ::= "float" WS*
-CHANNEL_TYPE ::= "channel" WS*
-RANGE_TYPE ::= "range" WS*
-MULTI_TYPE ::= "multi" WS*
-
-KEYWORD ::= "false" | "true" | VectorialType | "operation"
+KEYWORD ::= "false" | "true" | VectorialType | "abort"
     | "void" | "return" | "if" | "else" | "for" | "break" | "continue"
 
-IT ::= ![a-zA-Z0-9] ANY
 WS ::= Comment | MultiLineComment | [#x20#x09#x0A#x0D]+
-INLINE_WS ::= Comment | SingleLineComment | [#x20#x09]+
+INLINE_WS ::= Comment | InlineComment | [#x20#x09]+
 
 Comment ::= "//" (!EOL ANY)*
 MultiLineComment ::= "/*" (!"*/" ANY)* "*/"
-SingleLineComment ::= "/*" (!"*/" !EOL ANY)* "*/"
+InlineComment ::= "/*" (!"*/" !EOL ANY)* "*/"
 
 EOL ::= (!#x0D #x0A | #x0D #x0A) EOF? | EOF
 ANY ::= [#x00-#xFFFF]
-any0 ::= [#x00-#xFFFF]

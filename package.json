@@ -1,7 +1,6 @@
 {
   "dependencies": {
-    "ebnf": "^1.9.1",
-    "typescript": "^3.9.10"
+    "ebnf": "^1.9.1"
   },
   "type": "module"
 }

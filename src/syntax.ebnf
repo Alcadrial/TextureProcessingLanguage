@@ -26,7 +26,7 @@ Assignment    ::= AssignExpr WS* AssignOp WS* Expr WS* ";"
 Call          ::= Identifier WS* CallArgs WS* ";"
 CallArgs      ::= "(" (CallArg WS* "," WS*)* CallArg WS* ")"
 CallArg       ::= Expr
- 
+
 ForLike               ::= "for" WS* "(" WS* LoopVar WS* ":" WS* Iterable ")" WS* ForBody
 ForBody               ::= "{" ForCommands? WS* "}" | ForCommand
 ForCommands           ::= WS* ForCommand ForCommands?

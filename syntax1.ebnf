@@ -1,5 +1,0 @@
-
-Program ::= Header? Body
-
-Header ::= "header" !"§"
-Body ::= [#x00-#xFFFF]*

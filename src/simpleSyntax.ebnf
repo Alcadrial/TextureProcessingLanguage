@@ -1,0 +1,77 @@
+
+Program ::= Commands? WS* EOF
+
+Commands ::= WS* Command Commands?
+
+Exec    ::= Closure | Command
+Closure ::= "{" Commands? WS* "}"
+Command ::= ReturnCommand | Decl | Assignment | Call | WhileLike | IfLike | Closure | Function
+
+ReturnCommand ::= "return" (WS+ Expr)? WS* ";"
+Decl          ::= DeclConst | DeclVar
+DeclConst     ::= "const" WS+ Identifier WS* "=" WS* String WS* ";"
+DeclVar       ::= "var" WS+ Identifier WS* ("=" WS* Expr WS*)? ";"
+Assignment    ::= AssignExpr WS* AssignOp WS* Expr WS* ";"
+Call          ::= Identifier WS* CallArgs WS* ";"
+CallArgs      ::= "(" (CallArg WS* "," WS*)* CallArg WS* ")"
+CallArg       ::= Expr
+
+WhileLike     ::= "while" WS* "(" WS* Expr WS* ")" WS* LoopBody
+LoopBody      ::= "{" (WS* LoopCommand)* WS* "}" | LoopCommand
+LoopCommand   ::= Command | "break" WS* ";" | "continue" WS* ";"
+LoopVar       ::= Identifier
+
+IfLike ::= "if" WS* "(" WS* Expr WS* ")" WS* Exec (WS* ElseLike)?
+ElseLike ::= "else" WS* Exec
+
+Function ::= Identifier WS* FunctionArgs WS* Exec
+FunctionArgs ::= "(" (FunctionArg WS* "," WS*)* FunctionArg WS* ")"
+FunctionArg ::= Identifier
+
+Expr ::= BinConcatExpr
+
+BinConcatExpr          ::= UnaryExpr WS* "|"  WS* Expr | BinEqualsExpr
+BinEqualsExpr          ::= UnaryExpr WS* "==" WS* Expr | BinUnequalsExpr
+BinUnequalsExpr        ::= UnaryExpr WS* "!=" WS* Expr | BinGreatherEqualsExpr
+BinGreatherEqualsExpr  ::= UnaryExpr WS* ">=" WS* Expr | BinGreatherExpr
+BinGreatherExpr        ::= UnaryExpr WS* ">"  WS* Expr | BinLesserEqualsExpr
+BinLesserEqualsExpr    ::= UnaryExpr WS* "<=" WS* Expr | BinLesserExpr
+BinLesserExpr          ::= UnaryExpr WS* "<"  WS* Expr | BinAndExpr
+BinAndExpr             ::= UnaryExpr WS* "&&" WS* Expr | BinLogicalOrExpr
+BinLogicalOrExpr       ::= UnaryExpr WS* "||" WS* Expr | BinAddExpr
+BinAddExpr             ::= UnaryExpr WS* "+"  WS* Expr | BinSubtractExpr
+BinSubtractExpr        ::= UnaryExpr WS* "-"  WS* Expr | BinMultiplyExpr
+BinMultiplyExpr        ::= UnaryExpr WS* "*"  WS* Expr | BinDivideExpr
+BinDivideExpr          ::= UnaryExpr WS* "/"  WS* Expr | BinRemainderExpr
+BinRemainderExpr       ::= UnaryExpr WS* "%"  WS* Expr | BinExtractExpr
+BinExtractExpr         ::= UnaryExpr WS* "<@" WS* Expr | BinEmbedExpr
+BinEmbedExpr           ::= UnaryExpr WS* ">@" WS* Expr | BinRangedExpr
+BinRangedExpr          ::= UnaryExpr WS* "@"  WS* Expr | UnaryExpr
+UnaryExpr              ::= (UnaryOp WS*)? CallExpr
+CallExpr               ::= Identifier WS* CallArgs | BracketExpr
+BracketExpr            ::= "(" WS* Expr WS* ")" | Value
+
+AssignExpr          ::= Identifier
+
+AssignOp ::= BinaryOp? "="
+BinaryOp ::= "+" | "-" | "*" | "&&" | "||" | "<@" | ">@" | "@"
+UnaryOp  ::= "-" | "!" | "*"
+
+Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]* WS*
+Value ::= Identifier | String | Boolean
+
+String ::= '"' [^"]* '"' | "'" [^']* "'"
+Boolean ::= "false" | "true"
+Int ::= [+-]? UINT
+UINT ::= [0-9]+
+
+KEYWORD ::= "false" | "true" | "const" | "var" | "return" | "if" | "else" | "while" | "break" | "continue"
+
+WS ::= Comment | MultiLineComment | [#x20#x09#x0A#x0D]+
+
+Comment ::= "//" (!EOL ANY)*
+MultiLineComment ::= "/*" (!"*/" ANY)* "*/"
+InlineComment ::= "/*" (!"*/" !EOL ANY)* "*/"
+
+EOL ::= (!#x0D #x0A | #x0D #x0A) EOF? | EOF
+ANY ::= [#x00-#xFFFF]
