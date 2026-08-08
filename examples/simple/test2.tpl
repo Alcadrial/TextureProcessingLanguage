@@ -1,8 +1,18 @@
 
-const iconFile = "icon.png";
-var icon = iconFile;
 
-const mask = "mask.png";
-var newIcon = icon * mask;
+var icon = "i0.png";
+
+rotate(image, angle) {
+    return image @ angle;
+}
+
+var mask = {
+
+};
+while (true) {
+    rotate(icon);
+   // if (icon ~ "2-Gray") break;
+
+}
 
 return newIcon;

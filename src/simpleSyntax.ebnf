@@ -1,35 +1,36 @@
 
-Program ::= Commands? WS* EOF
-
-Commands ::= WS* Command Commands?
+Program ::= (WS* Command)* WS* EOF
 
 Exec    ::= Closure | Command
-Closure ::= "{" Commands? WS* "}"
-Command ::= ReturnCommand | Decl | Assignment | Call | WhileLike | IfLike | Closure | Function
+Closure ::= "{" (WS* Command)* WS* "}"
+Command ::= NOP | ReturnCommand | Decl | Assignment | Call | WhileLike | IfLike | Closure | Function
 
-ReturnCommand ::= "return" (WS+ Expr)? WS* ";"
+NOP ::= ";"
+ReturnCommand ::= "return" WS+ Expr ";"
 Decl          ::= DeclConst | DeclVar
-DeclConst     ::= "const" WS+ Identifier WS* "=" WS* String WS* ";"
-DeclVar       ::= "var" WS+ Identifier WS* ("=" WS* Expr WS*)? ";"
-Assignment    ::= AssignExpr WS* AssignOp WS* Expr WS* ";"
-Call          ::= Identifier WS* CallArgs WS* ";"
-CallArgs      ::= "(" (CallArg WS* "," WS*)* CallArg WS* ")"
-CallArg       ::= Expr
+DeclConst     ::= "const" WS+ Identifier "=" WS* String WS* ";"
+DeclVar       ::= "var" WS+ Identifier ("=" WS* Expr)? ";"
+Assignment    ::= Identifier AssignOp WS* Expr ";"
 
-WhileLike     ::= "while" WS* "(" WS* Expr WS* ")" WS* LoopBody
+Call          ::= Identifier CallArgs WS* ";"
+CallArgs      ::= "(" (Expr "," WS*)* Expr ")"
+
+WhileLike     ::= "while" WS* "(" WS* Expr ")" WS* LoopBody
 LoopBody      ::= "{" (WS* LoopCommand)* WS* "}" | LoopCommand
 LoopCommand   ::= Command | "break" WS* ";" | "continue" WS* ";"
-LoopVar       ::= Identifier
 
-IfLike ::= "if" WS* "(" WS* Expr WS* ")" WS* Exec (WS* ElseLike)?
+IfLike ::= "if" WS* "(" WS* Expr ")" WS* Exec (WS* ElseLike)?
 ElseLike ::= "else" WS* Exec
 
-Function ::= Identifier WS* FunctionArgs WS* Exec
-FunctionArgs ::= "(" (FunctionArg WS* "," WS*)* FunctionArg WS* ")"
-FunctionArg ::= Identifier
+Function ::= Identifier FunctionArgs WS* Exec
+FunctionArgs ::= "(" (Expr "," WS*)* Expr ")"
 
 Expr ::= BinConcatExpr
-
+/* add Concats |< |> |v |^ |<^ |<v |>v |>^ */
+/* add Rotate @ !@ */
+/* add Reflect <|> <-> */
+/* add Formatting ~ */
+/* add ApplyTransform ~<T> */
 BinConcatExpr          ::= UnaryExpr WS* "|"  WS* Expr | BinEqualsExpr
 BinEqualsExpr          ::= UnaryExpr WS* "==" WS* Expr | BinUnequalsExpr
 BinUnequalsExpr        ::= UnaryExpr WS* "!=" WS* Expr | BinGreatherEqualsExpr
@@ -37,8 +38,8 @@ BinGreatherEqualsExpr  ::= UnaryExpr WS* ">=" WS* Expr | BinGreatherExpr
 BinGreatherExpr        ::= UnaryExpr WS* ">"  WS* Expr | BinLesserEqualsExpr
 BinLesserEqualsExpr    ::= UnaryExpr WS* "<=" WS* Expr | BinLesserExpr
 BinLesserExpr          ::= UnaryExpr WS* "<"  WS* Expr | BinAndExpr
-BinAndExpr             ::= UnaryExpr WS* "&&" WS* Expr | BinLogicalOrExpr
-BinLogicalOrExpr       ::= UnaryExpr WS* "||" WS* Expr | BinAddExpr
+BinAndExpr             ::= UnaryExpr WS* "&&" WS* Expr | BinOrExpr
+BinOrExpr              ::= UnaryExpr WS* "||" WS* Expr | BinAddExpr
 BinAddExpr             ::= UnaryExpr WS* "+"  WS* Expr | BinSubtractExpr
 BinSubtractExpr        ::= UnaryExpr WS* "-"  WS* Expr | BinMultiplyExpr
 BinMultiplyExpr        ::= UnaryExpr WS* "*"  WS* Expr | BinDivideExpr
@@ -48,17 +49,16 @@ BinExtractExpr         ::= UnaryExpr WS* "<@" WS* Expr | BinEmbedExpr
 BinEmbedExpr           ::= UnaryExpr WS* ">@" WS* Expr | BinRangedExpr
 BinRangedExpr          ::= UnaryExpr WS* "@"  WS* Expr | UnaryExpr
 UnaryExpr              ::= (UnaryOp WS*)? CallExpr
-CallExpr               ::= Identifier WS* CallArgs | BracketExpr
-BracketExpr            ::= "(" WS* Expr WS* ")" | Value
-
-AssignExpr          ::= Identifier
+CallExpr               ::= Identifier CallArgs WS* | BracketExpr
+BracketExpr            ::= "(" WS* Expr ")" WS* | ClosureExpr
+ClosureExpr            ::= Closure WS* | Value
 
 AssignOp ::= BinaryOp? "="
 BinaryOp ::= "+" | "-" | "*" | "&&" | "||" | "<@" | ">@" | "@"
 UnaryOp  ::= "-" | "!" | "*"
 
 Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]* WS*
-Value ::= Identifier | String | Boolean
+Value ::= Identifier | String WS* | Boolean WS*
 
 String ::= '"' [^"]* '"' | "'" [^']* "'"
 Boolean ::= "false" | "true"
