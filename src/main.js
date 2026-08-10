@@ -927,7 +927,7 @@ const properties = {};
 var syntaxFilename = "syntax.ebnf";
 var codeFilename = "test.tpl";
 syntaxFilename = "src/simpleSyntax.ebnf";
-codeFilename = "examples/simple/test2.tpl";
+codeFilename = "examples/simple/test1.tpl";
 if (args[0]) codeFilename = "examples/simple/" + args[0] + ".tpl";
 
 
@@ -954,6 +954,16 @@ try {
     });
 
     await engine.execute(ast);
+    const result = engine.returnValue.value;
+    if (!result) {
+        console.log("No results");
+    }
+    else {
+        const { width, height } = result.info;
+        await sharp(result.data.buffer, { raw: { width, height, channels: result.info.channels } })
+            .png()
+            .toFile("out.png");
+    }
 
 }
 catch (err) {
