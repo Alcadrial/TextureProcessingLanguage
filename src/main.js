@@ -633,6 +633,12 @@ class Engine {
             case "return": {
                 this.context.scope.isRunning = false;
                 await this.execute(token.expr);
+                if (this.context.scope.type == ScopeTypes.GLOBAL) {
+                    if (this.returnValue.type == Types.STRING) {
+                        this.returnValue.value = await this.loadImage(this.returnValue.value);
+                        this.returnValue.type = Types.IMAGE;
+                    }
+                }
                 break;
             }
             case "const": {
@@ -875,14 +881,12 @@ class Engine {
 
         if (left === undefined) {
             //unary
-            const { width, height } = right.info;
+            const { width, height, channels } = right.info;
             const { data, info } = await this.createBlankImage(width, height);
             const rightTexture = new Uint8ClampedArray(right.data.buffer);
             const texture = new Uint8ClampedArray(data.buffer);
-            for (let i = 0; i < height; i++) {
-                for (let j = 0; j < width; j++) {
-                    texture[i * width + j] = op(rightTexture[i * width + j])
-                }
+            for (let i = 0; i < width * height * channels; i++) {
+                texture[i] = op(rightTexture[i] / 255) * 255;
             }
 
             return { data, info };
@@ -892,16 +896,17 @@ class Engine {
             if (right.info.width != left.info.width || right.info.height != left.info.height) {
                 this.context.throw(`Incompatible sizes for operation '${op}': ${right.info.width}x${right.info.height} and ${left.info.width}x${left.info.height}`);
             }
+            if (right.info.channels != left.info.channels) {
+                this.context.throw(`Incompatible formats for operation '${op}': ${right.info.channels} and ${left.info.channels}`);
+            }
 
-            const { width, height } = right.info;
+            const { width, height, channels } = right.info;
             const { data, info } = await this.createBlankImage(width, height);
             const rightTexture = new Uint8ClampedArray(right.data.buffer);
             const leftTexture = new Uint8ClampedArray(left.data.buffer);
             const texture = new Uint8ClampedArray(data.buffer);
-            for (let i = 0; i < height; i++) {
-                for (let j = 0; j < width; j++) {
-                    texture[i * width + j] = op(leftTexture[i * width + j], rightTexture[i * width + j])
-                }
+            for (let i = 0; i < width * height * channels; i++) {
+                texture[i] = op(leftTexture[i] / 255, rightTexture[i] / 255) * 255;
             }
             return { data, info };
         }
@@ -964,7 +969,6 @@ try {
             .png()
             .toFile("out.png");
     }
-
 }
 catch (err) {
     console.error(err);
