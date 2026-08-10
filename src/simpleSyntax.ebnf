@@ -3,9 +3,10 @@ Program ::= (WS* Command)* WS* EOF
 
 Exec    ::= Closure | Command
 Closure ::= "{" (WS* Command)* WS* "}"
-Command ::= NOP | ReturnCommand | Decl | Assignment | Call | WhileLike | IfLike | Closure | Function
+Command ::= Nop | Signal | ReturnCommand | Decl | Assignment | Call | WhileLike | IfLike | Closure | Function
 
-NOP ::= ";"
+Nop           ::= ";"
+Signal        ::= "signal" WS* ";"
 ReturnCommand ::= "return" WS+ Expr ";"
 Decl          ::= DeclConst | DeclVar
 DeclConst     ::= "const" WS+ Identifier "=" WS* String WS* ";"
@@ -13,7 +14,7 @@ DeclVar       ::= "var" WS+ Identifier ("=" WS* Expr)? ";"
 Assignment    ::= Identifier AssignOp WS* Expr ";"
 
 Call          ::= Identifier CallArgs WS* ";"
-CallArgs      ::= "(" (Expr "," WS*)* Expr ")"
+CallArgs      ::= "(" WS* ((Expr "," WS*)* Expr)? ")"
 
 WhileLike     ::= "while" WS* "(" WS* Expr ")" WS* LoopBody
 LoopBody      ::= "{" (WS* LoopCommand)* WS* "}" | LoopCommand
@@ -23,13 +24,13 @@ IfLike ::= "if" WS* "(" WS* Expr ")" WS* Exec (WS* ElseLike)?
 ElseLike ::= "else" WS* Exec
 
 Function ::= Identifier FunctionArgs WS* Exec
-FunctionArgs ::= "(" (Expr "," WS*)* Expr ")"
+FunctionArgs ::= "(" WS* ((Identifier "," WS*)* Identifier)? ")"
 
 Expr ::= BinConcatExpr
 /* add Concats |< |> |v |^ |<^ |<v |>v |>^ */
 /* add Rotate @ !@ */
 /* add Reflect <|> <-> */
-/* add Formatting ~ */
+/* add Formatting ~ ~? */
 /* add ApplyTransform ~<T> */
 BinConcatExpr          ::= UnaryExpr WS* "|"  WS* Expr | BinEqualsExpr
 BinEqualsExpr          ::= UnaryExpr WS* "==" WS* Expr | BinUnequalsExpr
@@ -55,7 +56,7 @@ ClosureExpr            ::= Closure WS* | Value
 
 AssignOp ::= BinaryOp? "="
 BinaryOp ::= "+" | "-" | "*" | "&&" | "||" | "<@" | ">@" | "@"
-UnaryOp  ::= "-" | "!" | "*"
+UnaryOp  ::= "-" | "!"
 
 Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]* WS*
 Value ::= Identifier | String WS* | Boolean WS*
@@ -65,7 +66,7 @@ Boolean ::= "false" | "true"
 Int ::= [+-]? UINT
 UINT ::= [0-9]+
 
-KEYWORD ::= "false" | "true" | "const" | "var" | "return" | "if" | "else" | "while" | "break" | "continue"
+KEYWORD ::= "false" | "true" | "const" | "var" | "return" | "if" | "else" | "while" | "break" | "continue" | "signal"
 
 WS ::= Comment | MultiLineComment | [#x20#x09#x0A#x0D]+
 
