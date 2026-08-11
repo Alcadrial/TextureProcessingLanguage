@@ -1,21 +1,22 @@
-signal;
+signal "Begin";
 
 const mask = "mask.png";
 signal;
 
 var newIcon = {
     var f = "icon.png";
-    signal;
-    ff() { signal; };
+    signal "Start closure";
+    ff() { signal "Executed ff"; };
     var g = {
-        signal;
+        signal "Executing g";
         ff();
         return f;
     };
     signal;
     f *= f;
-    signal;
-    return f * f * f;
+    signal "End closure";
+    return g * f * g;
 };
 
-return newIcon;
+signal "End";
+return newIcon ** mask;

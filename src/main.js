@@ -37,6 +37,7 @@ type Command = (
 type Signal = {
     tokenType: "signal"
     location: Location;
+    message?: string;
 }
 type LoopCommand = Command | {
     tokenType: "break";
@@ -151,8 +152,9 @@ class AstBuilder {
                 };
             }
         }
+        
         return {
-            lineNumber: this.lineCounter.length
+            lineNumber: this.lineCounter.length + 1
         };
     }
 
@@ -189,7 +191,8 @@ class AstBuilder {
                     case "Signal": {
                         return {
                             tokenType: "signal",
-                            location: this.getLocation(commandToken)
+                            location: this.getLocation(commandToken),
+                            message: this.buildAst(commandToken.children[0])/* as String */
                         };
                     }
                     case "ReturnCommand": {
@@ -359,6 +362,7 @@ class AstBuilder {
                 case "Extract": op = "<@"; break;
                 case "Embed": op = ">@"; break;
                 case "Ranged": op = "@"; break;
+                case "Blending": op = "**"; break;
                 default: return undefined;
             }
             return {
@@ -505,8 +509,9 @@ class Context {
         throw `Error: ${error}\n${this.collectStackTrace()}`;
     }
 
-    signal() {
-        var message = "Current execution trace: \n" + this.collectStackTrace();
+    signal(message) {
+        if (message === undefined) message = "Current execution trace";
+        message += ": \n" + this.collectStackTrace();
         console.log(message);
     }
 
@@ -627,7 +632,7 @@ class Engine {
                 break;
             }
             case "signal": {
-                this.context.signal();
+                this.context.signal(token.message);
                 break;
             }
             case "return": {
@@ -828,6 +833,7 @@ class Engine {
                             case "*": await this.applyElementWiseOperation(combinedType, token.op, (v, w) => v * w, rightValue, leftValue); break;
                             case "/": await this.applyElementWiseOperation(combinedType, token.op, (v, w) => v / w, rightValue, leftValue); break;
                             case "%": await this.applyElementWiseOperation(combinedType, token.op, (v, w) => v % w, rightValue, leftValue); break;
+                            case "**": await this.applyBlending(combinedType, rightValue, leftValue); break;
                             default:
                                 this.context.throw(`Unknown operation '${token.op}'`);
                         }
@@ -922,19 +928,50 @@ class Engine {
                 this.context.throw(`The '${op}' operation requires both image value`);
         }
     }
+
+    async applyBlending(combinedType, right, left) {
+        switch (combinedType) {
+            case Types.IMAGE + "-" + Types.IMAGE:
+                this.returnValue.value = await sharp(left.data.buffer, { raw: { width: left.info.width, height: left.info.height, channels: left.info.channels } })
+                    .composite([{
+                        input: right.data.buffer,
+                        raw: { width: right.info.width, height: right.info.height, channels: right.info.channels },
+                        blend: "over"
+                    }])
+                    .raw()
+                    .toBuffer({ resolveWithObject: true });
+                this.returnValue.type = Types.IMAGE;
+                break;
+            default:
+                this.context.throw(`The '${op}' operation requires both image value`);
+        }
+    }
 }
 
-const args = process.argv.slice(2);
-
-
 const properties = {};
+
+for (const arg of process.argv.slice(2)) {
+    const eqi = arg.indexOf("=");
+    if (eqi == -1) {
+        properties[arg] = null;
+    }
+    else {
+        const key = arg.substring(0, eqi);
+        const value = arg.substring(eqi + 1);
+        properties[key] = value;
+    }
+}
+console.log("Properties", properties);
 
 var syntaxFilename = "syntax.ebnf";
 var codeFilename = "test.tpl";
 syntaxFilename = "src/simpleSyntax.ebnf";
 codeFilename = "examples/simple/test1.tpl";
-if (args[0]) codeFilename = "examples/simple/" + args[0] + ".tpl";
 
+if (properties.test) codeFilename = "examples/simple/" + properties.test + ".tpl";
+else if (properties.input) codeFilename = properties.input;
+if (properties.syntax) syntaxFilename = properties.syntax;
+const replMode = properties.repl !== undefined && properties.repl;
 
 try {
     console.log("Reading syntax...");
@@ -954,7 +991,7 @@ try {
     console.log("Executing...");
 
     const engine = new Engine({
-        path: "examples/simple/images",
+        path: properties.imagesPath ?? "examples/simple/images",
         debug: properties.debug
     });
 

@@ -6,7 +6,7 @@ Closure ::= "{" (WS* Command)* WS* "}"
 Command ::= Nop | Signal | ReturnCommand | Decl | Assignment | Call | WhileLike | IfLike | Closure | Function
 
 Nop           ::= ";"
-Signal        ::= "signal" WS* ";"
+Signal        ::= "signal" WS* (String WS*)? ";"
 ReturnCommand ::= "return" WS+ Expr ";"
 Decl          ::= DeclConst | DeclVar
 DeclConst     ::= "const" WS+ Identifier "=" WS* String WS* ";"
@@ -48,14 +48,15 @@ BinDivideExpr          ::= UnaryExpr WS* "/"  WS* Expr | BinRemainderExpr
 BinRemainderExpr       ::= UnaryExpr WS* "%"  WS* Expr | BinExtractExpr
 BinExtractExpr         ::= UnaryExpr WS* "<@" WS* Expr | BinEmbedExpr
 BinEmbedExpr           ::= UnaryExpr WS* ">@" WS* Expr | BinRangedExpr
-BinRangedExpr          ::= UnaryExpr WS* "@"  WS* Expr | UnaryExpr
+BinRangedExpr          ::= UnaryExpr WS* "@"  WS* Expr | BinBlendingExpr
+BinBlendingExpr        ::= UnaryExpr WS* "**" WS* Expr | UnaryExpr
 UnaryExpr              ::= (UnaryOp WS*)? CallExpr
 CallExpr               ::= Identifier CallArgs WS* | BracketExpr
 BracketExpr            ::= "(" WS* Expr ")" WS* | ClosureExpr
 ClosureExpr            ::= Closure WS* | Value
 
 AssignOp ::= BinaryOp? "="
-BinaryOp ::= "+" | "-" | "*" | "&&" | "||" | "<@" | ">@" | "@"
+BinaryOp ::= "+" | "-" | "*" | "**" | "&&" | "||" | "<@" | ">@" | "@"
 UnaryOp  ::= "-" | "!"
 
 Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]* WS*
