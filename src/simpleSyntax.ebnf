@@ -3,10 +3,11 @@ Program ::= (WS* Command)* WS* EOF
 
 Exec    ::= Closure | Command
 Closure ::= "{" (WS* Command)* WS* "}"
-Command ::= Nop | Signal | ReturnCommand | Decl | Assignment | Call | WhileLike | IfLike | Closure | Function
+Command ::= Nop | Signal | Print | ReturnCommand | Decl | Assignment | Call | WhileLike | IfLike | Closure | Function
 
 Nop           ::= ";"
 Signal        ::= "signal" WS* (String WS*)? ";"
+Print         ::= "print" WS* String WS* (CallArgs WS*)? ";"
 ReturnCommand ::= "return" WS+ Expr ";"
 Decl          ::= DeclConst | DeclVar
 DeclConst     ::= "const" WS+ Identifier "=" WS* String WS* ";"
@@ -26,30 +27,19 @@ ElseLike ::= "else" WS* Exec
 Function ::= Identifier FunctionArgs WS* Exec
 FunctionArgs ::= "(" WS* ((Identifier "," WS*)* Identifier)? ")"
 
-Expr ::= BinConcatExpr
-/* add Concats |< |> |v |^ |<^ |<v |>v |>^ */
-/* add Rotate @ !@ */
-/* add Reflect <|> <-> */
+Expr ::= BinRotateExpr
 /* add Formatting ~ ~? */
 /* add ApplyTransform ~<T> */
-BinConcatExpr          ::= UnaryExpr WS* "|"  WS* Expr | BinEqualsExpr
-BinEqualsExpr          ::= UnaryExpr WS* "==" WS* Expr | BinUnequalsExpr
-BinUnequalsExpr        ::= UnaryExpr WS* "!=" WS* Expr | BinGreatherEqualsExpr
-BinGreatherEqualsExpr  ::= UnaryExpr WS* ">=" WS* Expr | BinGreatherExpr
-BinGreatherExpr        ::= UnaryExpr WS* ">"  WS* Expr | BinLesserEqualsExpr
-BinLesserEqualsExpr    ::= UnaryExpr WS* "<=" WS* Expr | BinLesserExpr
-BinLesserExpr          ::= UnaryExpr WS* "<"  WS* Expr | BinAndExpr
-BinAndExpr             ::= UnaryExpr WS* "&&" WS* Expr | BinOrExpr
-BinOrExpr              ::= UnaryExpr WS* "||" WS* Expr | BinAddExpr
-BinAddExpr             ::= UnaryExpr WS* "+"  WS* Expr | BinSubtractExpr
-BinSubtractExpr        ::= UnaryExpr WS* "-"  WS* Expr | BinMultiplyExpr
-BinMultiplyExpr        ::= UnaryExpr WS* "*"  WS* Expr | BinDivideExpr
-BinDivideExpr          ::= UnaryExpr WS* "/"  WS* Expr | BinRemainderExpr
-BinRemainderExpr       ::= UnaryExpr WS* "%"  WS* Expr | BinExtractExpr
-BinExtractExpr         ::= UnaryExpr WS* "<@" WS* Expr | BinEmbedExpr
-BinEmbedExpr           ::= UnaryExpr WS* ">@" WS* Expr | BinRangedExpr
-BinRangedExpr          ::= UnaryExpr WS* "@"  WS* Expr | BinBlendingExpr
-BinBlendingExpr        ::= UnaryExpr WS* "**" WS* Expr | UnaryExpr
+BinRotateExpr          ::= UnaryExpr WS* RotateTypeOp WS* Expr | BinReflectExpr
+BinConcatExpr          ::= UnaryExpr WS* ConcatOp WS* Expr | BinReflectExpr
+BinReflectExpr         ::= UnaryExpr WS* ReflectOp WS* Expr | BinCompareExpr
+BinCompareExpr         ::= UnaryExpr WS* CompareOp WS* Expr | BinAndExpr
+BinAndExpr             ::= UnaryExpr WS* AndOp WS* Expr | BinOrExpr
+BinOrExpr              ::= UnaryExpr WS* OrOp WS* Expr | BinAddSubExpr
+BinAddSubExpr          ::= UnaryExpr WS* AddSubOp WS* Expr | BinMulDivRemExpr
+BinMulDivRemExpr       ::= UnaryExpr WS* MulDivRemOp WS* Expr | BinRangedExpr
+BinRangedExpr          ::= UnaryExpr WS* RangedOp WS* Expr | BinBlendingExpr
+BinBlendingExpr        ::= UnaryExpr WS* BlendOp WS* Expr | UnaryExpr
 UnaryExpr              ::= (UnaryOp WS*)? CallExpr
 CallExpr               ::= Identifier CallArgs WS* | BracketExpr
 BracketExpr            ::= "(" WS* Expr ")" WS* | ClosureExpr
@@ -58,16 +48,27 @@ ClosureExpr            ::= Closure WS* | Value
 AssignOp ::= BinaryOp? "="
 BinaryOp ::= "+" | "-" | "*" | "**" | "&&" | "||" | "<@" | ">@" | "@"
 UnaryOp  ::= "-" | "!"
+RotateTypeOp ::= "@"   | "!@"
+ConcatOp     ::= "|<"  | "|>"  | "|v"  | "|^"  | "|<^" | "|<v" | "|>v" | "|<^"
+ReflectOp    ::= "<|>" | "<->" | "</>" | "<\\>"
+CompareOp    ::= "=="  | "!="  | ">="  | ">"   | "<="  | "<"
+AndOp        ::= "&&"
+OrOp         ::= "||"
+AddSubOp     ::= "+"   | "-"
+MulDivRemOp  ::= "*"   | "/"   | "%"
+RangedOp     ::= "~@"  | "<@"  | ">@"
+BlendOp      ::= "**"
 
 Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]* WS*
-Value ::= Identifier | String WS* | Boolean WS*
+Value ::= Identifier | String WS* | Boolean WS* | Float WS* | Int WS*
 
 String ::= '"' [^"]* '"' | "'" [^']* "'"
 Boolean ::= "false" | "true"
+Float ::= [+-]? [0-9]* "."? [0-9]+ ([eE] [+-]? [0-9]+)?
 Int ::= [+-]? UINT
 UINT ::= [0-9]+
 
-KEYWORD ::= "false" | "true" | "const" | "var" | "return" | "if" | "else" | "while" | "break" | "continue" | "signal"
+KEYWORD ::= "false" | "true" | "const" | "var" | "return" | "if" | "else" | "while" | "break" | "continue" | "signal" | "print"
 
 WS ::= Comment | MultiLineComment | [#x20#x09#x0A#x0D]+
 

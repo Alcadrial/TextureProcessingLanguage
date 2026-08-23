@@ -19,16 +19,17 @@ interface IToken {
 }
 */
 /*
-type Location = {
+type DebugData = {
     lineNumber: number;
+    text: string;
 }
 type Token = {
     tokenType: string;
-    location: Location;
+    debugData: DebugData;
 }
 type Program = {
     tokenType: "program";
-    location: Location;
+    debugData: DebugData;
     commands: Command[];
 }
 type Command = (
@@ -36,90 +37,91 @@ type Command = (
 )
 type Signal = {
     tokenType: "signal"
-    location: Location;
+    debugData: DebugData;
     message?: string;
+}
+type Print = {
+    tokenType: "print"
+    debugData: DebugData;
+    message: string;
+    args: Expr[];
 }
 type LoopCommand = Command | {
     tokenType: "break";
-    location: Location;
+    debugData: DebugData;
 } | {
     tokenType: "continue";
-    location: Location;
+    debugData: DebugData;
 }
 type ReturnCommand = {
     tokenType: "return";
-    location: Location;
+    debugData: DebugData;
     expr: Expr;
 }
 type Decl = ({
     tokenType: "const";
-    location: Location;
+    debugData: DebugData;
     id: Identifier;
     init: string;
 } | {
     tokenType: "var";
-    location: Location;
+    debugData: DebugData;
     id: Identifier;
     init?: Expr;
 })
 type Assignment = {
     tokenType: "assignment";
-    location: Location;
+    debugData: DebugData;
     dstId: Identifier;
     init?: Expr;
 }
 type Call = {
     tokenType: "call";
-    location: Location;
+    debugData: DebugData;
     id: Identifier;
     args: Expr[];
 }
 type WhileLike = {
     tokenType: "while";
-    location: Location;
+    debugData: DebugData;
     condition: Expr;
     commands: LoopCommand[];
 }
 type IfLike = {
     tokenType: "if";
-    location: Location;
+    debugData: DebugData;
     condition: Expr;
     commands: Command[];
     elseCommands?: Command[];
 }
 type Closure = {
     tokenType: "closure";
-    location: Location;
+    debugData: DebugData;
     commands: Command[];
 }
 type Function = {
     tokenType: "function";
-    location: Location;
+    debugData: DebugData;
     id: Identifier;
     args: Identifier[];
     commands: Command[];
 }
 type Expr = {
     tokenType: "expr";
-    location: Location;
+    debugData: DebugData;
 } & ({
-    type: "unary";
+    type: "operation";
     op: string;
-    expr: Expr;
+    exprs: Expr[];
 } | {
     type: "call";
     functionId: Identifier;
     args: Expr[];
 } | {
-    type: "binary";
-    op: string;
-    left: Expr;
-    right: Expr;
-} | {
     type: "id";
     id: Identifier;
 } | {
-    type: "boolean" | "string";
+    type: "boolean" | "string" | "number";
     value: string;
 } | {
     type: "closure";
@@ -152,9 +154,17 @@ class AstBuilder {
                 };
             }
         }
-        
+
         return {
             lineNumber: this.lineCounter.length + 1
+        };
+    }
+
+    getDebugData(token) {
+        let text = token.text.trim();
+        return {
+            location: this.getLocation(token),
+            text: text.length < 30 ? text : text.substring(0, 27) + "..."
         };
     }
 
@@ -166,7 +176,7 @@ class AstBuilder {
                 return {
                     tokenType: "program",
                     commands: token.children.map(t => this.buildAst(t))/* as Command[] */,
-                    location: this.getLocation(token)
+                    debugData: this.getDebugData(token)
                 };
             }
             case "LoopCommand": {
@@ -177,7 +187,7 @@ class AstBuilder {
                 //otherwise, the token it's "break" or "continue"
                 return {
                     tokenType: token.text.substring(0, token.text.length - 1).trim(),
-                    location: this.getLocation(token)
+                    debugData: this.getDebugData(token)
                 };
             }
             case "Command": {
@@ -191,14 +201,22 @@ class AstBuilder {
                     case "Signal": {
                         return {
                             tokenType: "signal",
-                            location: this.getLocation(commandToken),
+                            debugData: this.getDebugData(commandToken),
                             message: this.buildAst(commandToken.children[0])/* as String */
+                        };
+                    }
+                    case "Print": {
+                        return {
+                            tokenType: "print",
+                            debugData: this.getDebugData(commandToken),
+                            message: this.buildAst(commandToken.children[0])/* as String */,
+                            args: commandToken.children[1].children.map(t => this.buildAstExpr(t))
                         };
                     }
                     case "ReturnCommand": {
                         return {
                             tokenType: "return",
-                            location: this.getLocation(commandToken),
+                            debugData: this.getDebugData(commandToken),
                             expr: this.buildAstExpr(commandToken.children[0])
                         };
                     }
@@ -208,7 +226,7 @@ class AstBuilder {
                             case "DeclConst": {
                                 return {
                                     tokenType: "const",
-                                    location: this.getLocation(declVariantToken),
+                                    debugData: this.getDebugData(declVariantToken),
                                     id: this.buildAst(declVariantToken.children[0])/* as Identifier */,
                                     init: this.buildAst(declVariantToken.children[1])/* as string */
                                 };
@@ -216,9 +234,9 @@ class AstBuilder {
                             case "DeclVar": {
                                 return {
                                     tokenType: "var",
-                                    location: this.getLocation(declVariantToken),
+                                    debugData: this.getDebugData(declVariantToken),
                                     id: this.buildAst(declVariantToken.children[0])/* as Identifier */,
-                                    init: this.buildAstExpr(declVariantToken.children[1])/* as Expr */
+                                    init: declVariantToken.children[1] ? this.buildAstExpr(declVariantToken.children[1]) : null/* as Expr */
                                 };
                             }
                             default: {
@@ -227,33 +245,33 @@ class AstBuilder {
                         }
                     }
                     case "Assignment": {
-                        const location = this.getLocation(commandToken);
+                        const debugData = this.getDebugData(commandToken);
                         const dstId = this.buildAst(commandToken.children[0])/* as Identifier */;
+                        const assignOp = commandToken.children[1];
                         const expr = this.buildAstExpr(commandToken.children[2])/* as Expr */;
                         return {
                             tokenType: "assignment",
-                            location,
+                            debugData,
                             dstId,
-                            op: commandToken.children[1].text,
-                            init: {
+                            op: assignOp.text,
+                            init: assignOp.children[0] ? {
                                 tokenType: "expr",
-                                location,
-                                type: "binary",
-                                op: commandToken.children[1].text.slice(0, -1),
-                                left: {
+                                debugData,
+                                type: "operation",
+                                op: assignOp.children[0].text,
+                                exprs: [{
                                     tokenType: "expr",
-                                    location,
+                                    debugData,
                                     type: "id",
                                     id: dstId
-                                },
-                                right: expr
-                            }
+                                }, expr],
+                            } : expr
                         };
                     }
                     case "Call": {
                         return {
                             tokenType: "call",
-                            location: this.getLocation(commandToken),
+                            debugData: this.getDebugData(commandToken),
                             id: this.buildAst(commandToken.children[0])/* as Identifier */,
                             args: commandToken.children[1].children.map(t => this.buildAstExpr(t))
                         };
@@ -261,7 +279,7 @@ class AstBuilder {
                     case "WhileLike": {
                         return {
                             tokenType: "while",
-                            location: this.getLocation(commandToken),
+                            debugData: this.getDebugData(commandToken),
                             condition: this.buildAstExpr(commandToken.children[0]),
                             commands: commandToken.children[1].children.map(t => this.buildAst(t)).filter(c => c)/* as LoopCommand[] */
                         };
@@ -269,7 +287,7 @@ class AstBuilder {
                     case "IfLike": {
                         return {
                             tokenType: "if",
-                            location: this.getLocation(commandToken),
+                            debugData: this.getDebugData(commandToken),
                             condition: this.buildAstExpr(commandToken.children[0]),
                             commands: this.buildAst(commandToken.children[1]).filter(c => c)/* as Command[] */,
                             elseCommands: this.buildAst(commandToken.children[2]).filter(c => c)/* as Command[] */
@@ -278,14 +296,14 @@ class AstBuilder {
                     case "Closure": {
                         return {
                             tokenType: "closure",
-                            location: this.getLocation(commandToken),
+                            debugData: this.getDebugData(commandToken),
                             commands: this.buildAst(commandToken.children[0]).filter(c => c)/* as Command[] */
                         };
                     }
                     case "Function": {
                         return {
                             tokenType: "function",
-                            location: this.getLocation(commandToken),
+                            debugData: this.getDebugData(commandToken),
                             id: this.buildAst(commandToken.children[0])/* as Identifier */,
                             args: commandToken.children[1].children.map(t => this.buildAst(t))/* as Identifier[] */,
                             commands: this.buildAst(commandToken.children[2]).filter(c => c)/* as Command[] */
@@ -299,7 +317,7 @@ class AstBuilder {
             case "Expr": {
                 return {
                     tokenType: "Expr",
-                    location: this.getLocation(token),
+                    debugData: this.getDebugData(token),
                     expr: this.buildAstExpr(token.children[0])
                 };
             }
@@ -334,44 +352,21 @@ class AstBuilder {
             let expr = token;
             let kind = expr.type;
             let e0 = expr.children[0];
-            let e1 = expr.children[1];
-            while (!e1) {
+            let e2 = expr.children[2];
+            while (!e2) {
                 expr = e0;
                 kind = expr.type;
                 //no binary expression found
                 if (kind.substring(0, 3) != "Bin") return this.buildAstExpr(expr);
                 e0 = expr.children[0];
-                e1 = expr.children[1];
-            }
-            let op;
-            switch (kind.substring(3, kind.length - 4)) {
-                case "Concat": op = "|"; break;
-                case "Equals": op = "=="; break;
-                case "Unequals": op = "!="; break;
-                case "GreatherEquals": op = ">="; break;
-                case "Greather": op = ">"; break;
-                case "LesserEquals": op = "<="; break;
-                case "Lesser": op = "<"; break;
-                case "And": op = "&&"; break;
-                case "Or": op = "||"; break;
-                case "Add": op = "+"; break;
-                case "Subtract": op = "-"; break;
-                case "Multiply": op = "*"; break;
-                case "Divide": op = "/"; break;
-                case "Remainder": op = "%"; break;
-                case "Extract": op = "<@"; break;
-                case "Embed": op = ">@"; break;
-                case "Ranged": op = "@"; break;
-                case "Blending": op = "**"; break;
-                default: return undefined;
+                e2 = expr.children[2];
             }
             return {
                 tokenType: "expr",
-                location: this.getLocation(expr),
-                type: "binary",
-                op: op,
-                left: this.buildAstExpr(e0),
-                right: this.buildAstExpr(e1)
+                debugData: this.getDebugData(expr),
+                type: "operation",
+                op: expr.children[1].text,
+                exprs: [this.buildAstExpr(e0), this.buildAstExpr(e2)]
             };
         }
         //Not a binary expression
@@ -383,10 +378,10 @@ class AstBuilder {
                 }
                 return {
                     tokenType: "expr",
-                    location: this.getLocation(e),
-                    type: "unary",
+                    debugData: this.getDebugData(token),
+                    type: "operation",
                     op: e.children[0].text.trim(),
-                    expr: this.buildAstExpr(e.children[1])
+                    exprs: [this.buildAstExpr(e.children[1])]
                 };
             }
             case "CallExpr": {
@@ -396,10 +391,10 @@ class AstBuilder {
                 }
                 return {
                     tokenType: "expr",
-                    location: this.getLocation(e),
+                    debugData: this.getDebugData(token),
                     type: "call",
-                    functionId: this.buildAstExpr(e.children[0])/* as Identifier */,
-                    args: e.children.slice(1).map(e0 => this.buildAstExpr(e0.children[0]))
+                    functionId: this.buildAst(token.children[0])/* as Identifier */,
+                    args: token.children[1].children.map(e0 => this.buildAstExpr(e0))
                 };
             }
             case "BracketExpr": {
@@ -412,7 +407,7 @@ class AstBuilder {
                 }
                 return {
                     tokenType: "expr",
-                    location: this.getLocation(e),
+                    debugData: this.getDebugData(token),
                     type: "closure",
                     commands: e.children.map(t => this.buildAst(t)).filter(c => c)
                 };
@@ -420,7 +415,7 @@ class AstBuilder {
             case "Identifier": {
                 return {
                     tokenType: "expr",
-                    location: this.getLocation(token),
+                    debugData: this.getDebugData(token),
                     type: "id",
                     id: token.text.trim()
                 };
@@ -428,7 +423,7 @@ class AstBuilder {
             case "String": {
                 return {
                     tokenType: "expr",
-                    location: this.getLocation(token),
+                    debugData: this.getDebugData(token),
                     type: "string",
                     value: token.text.trim().substring(1, token.text.length - 1)
                 };
@@ -436,8 +431,24 @@ class AstBuilder {
             case "Boolean": {
                 return {
                     tokenType: "expr",
-                    location: this.getLocation(token),
+                    debugData: this.getDebugData(token),
                     type: "boolean",
+                    value: token.text.trim()
+                };
+            }
+            case "Float": {
+                return {
+                    tokenType: "expr",
+                    debugData: this.getDebugData(token),
+                    type: "number",
+                    value: token.text.trim()
+                };
+            }
+            case "Int": {
+                return {
+                    tokenType: "expr",
+                    debugData: this.getDebugData(token),
+                    type: "number",
                     value: token.text.trim()
                 };
             }
@@ -451,11 +462,12 @@ class AstBuilder {
 const Types = {
     IMAGE: 0,
     STRING: 1,
-    BOOLEAN: 2
+    BOOLEAN: 2,
+    NUMBER: 3
 }
 
 function getTypeName(type) {
-    return ["image", "string", "boolean"][type] ?? "unknown";
+    return ["image", "string", "boolean", "number"][type] ?? "unknown";
 }
 
 const ScopeTypes = {
@@ -468,6 +480,21 @@ function getScopeTypeName(type) {
     return ["global", "loop", "plain"][type] ?? "unknown";
 }
 
+function getVarString(variable) {
+
+    switch (variable.type) {
+        case Types.BOOLEAN:
+        case Types.NUMBER:
+        case Types.STRING:
+            return variable.value;
+        case Types.IMAGE:
+            const info = variable.value.info;
+            return `{Image ${info.width}x${info.height}}`;
+        default:
+            return "{unknown object}";
+    }
+}
+
 class Context {
 
     constructor() {
@@ -475,7 +502,7 @@ class Context {
             type: ScopeTypes.GLOBAL,
             name: "global",
             isRunning: true,
-            functionStore: {},
+            environment: new Environment(),
             higherScope: null,
             token: undefined,
             state: new State()
@@ -487,7 +514,7 @@ class Context {
             type: type,
             name: name,
             isRunning: true,
-            functionStore: { ...this.scope.functionStore },
+            environment: new Environment(this.scope.environment),
             higherScope: this.scope,
             token: undefined,
             state: new State(this.scope.state)
@@ -503,8 +530,8 @@ class Context {
     }
 
     throw(error) {
-        const location = this.scope.token?.location;
-        const lineNumber = location?.lineNumber ?? -1;
+        const debugData = this.scope.token?.debugData;
+        const lineNumber = debugData?.location?.lineNumber ?? -1;
 
         throw `Error: ${error}\n${this.collectStackTrace()}`;
     }
@@ -519,9 +546,9 @@ class Context {
         let message = "";
         let lineNumber = undefined;
         for (let scope = this.scope; scope; scope = scope.higherScope) {
-            const location = scope.token?.location;
+            const debugData = scope.token?.debugData;
             if (lineNumber === undefined) {
-                lineNumber = location?.lineNumber ?? -1;
+                lineNumber = debugData?.location?.lineNumber ?? -1;
             }
             if (scope.name) {
                 message += `    at ${scope.name}(line:${lineNumber != -1 ? lineNumber : "?"})\n`;
@@ -532,11 +559,45 @@ class Context {
     }
 }
 
+class Environment {
+
+    constructor(environment) {
+        if (environment) {
+            //copy all denotable values
+            this.operations = { ...environment.operations };
+            this.functions = { ...environment.functions };
+        }
+        else {
+            this.operations = {};
+            this.functions = {};
+        }
+    }
+
+    bindOperation(name, inputTypes, outputType, op) {
+        this.operations[`${name} ${inputTypes}`] = {
+            operation: op,
+            outputType
+        };
+    }
+
+    lookupOperation(name, inputTypes) {
+        return this.operations[`${name} ${inputTypes}`];
+    }
+
+    bindFunctions(name, f) {
+        this.functions[name] = f;
+    }
+
+    lookupFunction(name) {
+        return this.functions[name];
+    }
+}
+
 class State {
 
     constructor(state) {
         if (state) {
-            //copy of all variables, keeping the same reference
+            //copy of all variables
             this.variables = { ...state.variables };
         }
         else {
@@ -560,14 +621,11 @@ class State {
             this.variables[name] = { name, value, type, isConst };
             return;
         }
-
-        switch (type) {
-            case Types.IMAGE:
-            case Types.STRING:
-                this.variables[name] = { name, value, type, isConst };
-                return;
-            default:
-                context.throw(`Cannot create a variable of type ${getTypeName(type)}`);
+        if (this.isAssignableTo(type, null)) {
+            this.variables[name] = { name, value, type, isConst };
+        }
+        else {
+            context.throw(`Cannot create a variable of type ${getTypeName(type)}`);
         }
     }
 
@@ -580,11 +638,13 @@ class State {
     }
 
     isAssignableTo(valueType, varType) {
+        if (varType == null) {
+            return true;
+        }
         if (valueType == varType) return true;
         if (varType == Types.STRING && valueType == Types.IMAGE) return true;
         return false;
     }
-
 
     replaceVariable(name, value, type, isConst) {
         this.variables[name] = {
@@ -608,11 +668,39 @@ class Engine {
         path,
         debug
     }*/) {
-        this.context = new Context({
-            isGlobal: true,
-            functionStore: {}
-        });
-        this.returnValue = null;
+        this.context = new Context();
+        (e => {
+            e.bindOperation("!", [Types.BOOLEAN], Types.BOOLEAN, (v) => !v);
+            e.bindOperation("-", [Types.NUMBER], Types.NUMBER, (v) => -v);
+
+            e.bindOperation("==", [Types.NUMBER, Types.NUMBER], Types.BOOLEAN, (v, w) => v == w);
+            e.bindOperation("==", [Types.BOOLEAN, Types.BOOLEAN], Types.BOOLEAN, (v, w) => v == w);
+            e.bindOperation("!=", [Types.NUMBER, Types.NUMBER], Types.BOOLEAN, (v, w) => v != w);
+            e.bindOperation("!=", [Types.BOOLEAN, Types.BOOLEAN], Types.BOOLEAN, (v, w) => v != w);
+            e.bindOperation(">=", [Types.NUMBER, Types.NUMBER], Types.BOOLEAN, (v, w) => v >= w);
+            e.bindOperation(">", [Types.NUMBER, Types.NUMBER], Types.BOOLEAN, (v, w) => v > w);
+            e.bindOperation("<=", [Types.NUMBER, Types.NUMBER], Types.BOOLEAN, (v, w) => v <= w);
+            e.bindOperation("<", [Types.NUMBER, Types.NUMBER], Types.BOOLEAN, (v, w) => v < w);
+            e.bindOperation("&&", [Types.BOOLEAN, Types.BOOLEAN], Types.BOOLEAN, (v, w) => v && w);
+            e.bindOperation("||", [Types.BOOLEAN, Types.BOOLEAN], Types.BOOLEAN, (v, w) => v || w);
+            e.bindOperation("+", [Types.NUMBER, Types.NUMBER], Types.NUMBER, (v, w) => v + w);
+            e.bindOperation("-", [Types.NUMBER, Types.NUMBER], Types.NUMBER, (v, w) => v - w);
+            e.bindOperation("*", [Types.NUMBER, Types.NUMBER], Types.NUMBER, (v, w) => v * w);
+            e.bindOperation("/", [Types.NUMBER, Types.NUMBER], Types.NUMBER, (v, w) => v / w);
+            e.bindOperation("%", [Types.NUMBER, Types.NUMBER], Types.NUMBER, (v, w) => v % w);
+
+            e.bindOperation("+", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 + c1, [v, w]));
+            e.bindOperation("-", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 - c1, [v, w]));
+            e.bindOperation("*", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 * c1, [v, w]));
+            e.bindOperation("/", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 / c1, [v, w]));
+            e.bindOperation("%", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 % c1, [v, w]));
+            e.bindOperation("**", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyBlending(v, w));
+
+            e.bindOperation("@", [Types.IMAGE, Types.NUMBER], Types.IMAGE, async (v, i) => await this.applyRotation(v, i));
+            e.bindOperation("!@", [Types.IMAGE, Types.NUMBER], Types.IMAGE, async (v, i) => await this.applyRotation(v, -i));
+
+        })(this.context.scope.environment);
+
         this.options = { ...options };
         if (!this.options.path.endsWith("/")) this.options.path += "/";
     }
@@ -621,30 +709,42 @@ class Engine {
         if (!token) this.context.throw("Cannot execute an undefined token");
         if (this.options.debug) console.log("Command: " + token.tokenType);
 
-        this.returnValue = null;
         this.context.scope.token = token;
         switch (token.tokenType) {
             case "program": {
+                let result;
                 for (const command of token.commands) {
-                    await this.execute(command);
+                    result = await this.execute(command);
                     if (!this.context.scope.isRunning) break;
                 }
-                break;
+                return result;
             }
             case "signal": {
                 this.context.signal(token.message);
                 break;
             }
-            case "return": {
-                this.context.scope.isRunning = false;
-                await this.execute(token.expr);
-                if (this.context.scope.type == ScopeTypes.GLOBAL) {
-                    if (this.returnValue.type == Types.STRING) {
-                        this.returnValue.value = await this.loadImage(this.returnValue.value);
-                        this.returnValue.type = Types.IMAGE;
+            case "print": {
+                let m = token.message;
+                if (m.includes("%s")) {
+                    for (const arg of token.args) {
+                        const v = await this.execute(arg);
+                        m = m.replace("%s", getVarString(v));
+                        if (!m.includes("%s")) break;
                     }
                 }
+                console.log(m);
                 break;
+            }
+            case "return": {
+                this.context.scope.isRunning = false;
+                const result = await this.execute(token.expr);
+                if (this.context.scope.type == ScopeTypes.GLOBAL) {
+                    if (result.type == Types.STRING) {
+                        result.value = await this.loadImage(result.value);
+                        result.type = Types.IMAGE;
+                    }
+                }
+                return result;
             }
             case "const": {
                 this.context.scope.state.addVariable(token.id, token.init, Types.STRING, true, this.context);
@@ -652,9 +752,9 @@ class Engine {
             }
             case "var": {
                 if (token.init) {
-                    await this.execute(token.init);
-                    if (this.returnValue == null) this.context.throw(`Assignment expression must return a value`);
-                    this.context.scope.state.addVariable(token.id, this.returnValue.value, this.returnValue.type, false, this.context);
+                    const result = await this.execute(token.init);
+                    if (result == null) this.context.throw(`Assignment expression must return a value`);
+                    this.context.scope.state.addVariable(token.id, result.value, result.type, false, this.context);
                 }
                 else {
                     this.context.scope.state.addVariable(token.id, null, null, false, this.context);
@@ -662,34 +762,38 @@ class Engine {
                 break;
             }
             case "assignment": {
-                await this.execute(token.init);
-                if (this.returnValue == null) this.context.throw(`Assignment expression must return a value`);
+                const result = await this.execute(token.init);
+                if (result == null) this.context.throw(`Assignment expression must return a value`);
 
-                this.context.scope.state.setVariable(token.dstId, this.returnValue.value, this.returnValue.type, this.context);
+                this.context.scope.state.setVariable(token.dstId, result.value, result.type, this.context);
                 break;
             }
             case "call": {
-                const f = this.context.scope.functionStore[token.id];
+                const args = [];
+                const types = [];
+                for (const expr of token.args) {
+                    const result = await this.execute(expr);
+                    if (result === null) this.context.throw(`Expression does not return a value`);
+                    args.push(result.value);
+                    types.push(result.type);
+                }
+                const f = this.context.scope.environment.lookupFunction(token.id);
                 if (f === undefined) this.context.throw(`Function ${token.id} not found`);
-                if (token.args.length < f.args.length) this.context.throw(`Missing arguments when calling function ${token.id}`);
-                if (token.args.length > f.args.length) this.context.throw(`Too many arguments when calling function ${token.id}`);
 
-                await this.executeCommands(ScopeTypes.PLAIN, f.commands, token.id, async state => {
+                return await this.executeCommands(ScopeTypes.PLAIN, f.commands, token.id, async state => {
                     for (const i in f.args) {
-                        await this.execute(token.args[i]);
-                        state.replaceVariable(f.args[i], this.returnValue.value, this.returnValue.type, false);
+                        state.replaceVariable(f.args[i], args[i], types[i], false);
                     }
                 });
-                break;
             }
             case "while": {
-                await this.execute(token.condition);
-                let condition = this.returnValue;
-                while (condition) {
+                let condition = await this.execute(token.condition);
+                if (condition.type != Types.BOOLEAN) this.context.throw(`Value of type ${getTypeName(condition.type)} cannot be casted to boolean`);
+                while (condition.value) {
                     await this.executeCommands(ScopeTypes.LOOP, token.commands);
                     if (this.context.scope.break) break;
-                    await this.execute(token.condition);
-                    condition = this.returnValue;
+                    condition = await this.execute(token.condition);
+                    if (condition.type != Types.BOOLEAN) this.context.throw(`Value of type ${getTypeName(condition.type)} cannot be casted to boolean`);
                 }
                 this.context.scope.break = undefined;
                 break;
@@ -706,8 +810,9 @@ class Engine {
                 break;
             }
             case "if": {
-                await this.execute(token.condition);
-                if (this.returnValue) {
+                const result = await this.execute(token.condition);
+                if (result.type != Types.BOOLEAN) this.context.throw(`Value of type ${getTypeName(result.type)} cannot be casted to boolean`);
+                if (result.value) {
                     await this.executeCommands(ScopeTypes.PLAIN, token.commands);
                 }
                 else if (token.elseCommands) {
@@ -716,134 +821,98 @@ class Engine {
                 break;
             }
             case "closure": {
-                await this.executeCommands(ScopeTypes.PLAIN, token.commands, "closure");
-                break;
+                return await this.executeCommands(ScopeTypes.PLAIN, token.commands, "closure");
             }
             case "function": {
-                this.context.scope.functionStore[token.id] = {
+                this.context.scope.environment.bindFunctions(token.id, {
                     args: token.args,
                     commands: token.commands
-                };
+                });
                 break;
             }
             case "expr": {
                 switch (token.type) {
                     case "boolean": {
-                        this.returnValue = {
+                        return {
                             value: token.value ? true : false,
                             type: Types.BOOLEAN
                         };
-                        break;
                     }
                     case "string": {
-                        this.returnValue = {
+                        return {
                             value: token.value,
                             type: Types.STRING
                         };
-                        break;
+                    }
+                    case "number": {
+                        return {
+                            value: Number(token.value),
+                            type: Types.NUMBER
+                        };
                     }
                     case "id": {
-                        const varr = this.context.scope.state.getVariable(token.id, this.context);
-                        this.returnValue = {
-                            value: varr.value,
-                            type: varr.type
-                        };
-                        break;
+                        return { ...this.context.scope.state.getVariable(token.id, this.context) };
                     }
                     case "call": {
-                        const f = this.context.scope.functionStore[token.functionId];
-                        if (f === undefined) this.context.throw(`Function ${token.id} not found`);
-                        if (token.args.length < f.args.length) this.context.throw(`Missing arguments when calling function ${token.id}`);
-                        if (token.args.length > f.args.length) this.context.throw(`Too many arguments when calling function ${token.id}`);
+                        const args = [];
+                        const types = [];
+                        for (const expr of token.args) {
+                            const result = await this.execute(expr);
+                            if (result === null) this.context.throw(`Expression does not return a value`);
+                            args.push(result.value);
+                            types.push(result.type);
+                        }
+                        const f = this.context.scope.environment.lookupFunction(token.functionId);
+                        if (f === undefined) this.context.throw(`Function ${token.functionId} not found`);
 
-                        await this.executeCommands(ScopeTypes.PLAIN, f.commands, token.functionId, async state => {
+                        const result = await this.executeCommands(ScopeTypes.PLAIN, f.commands, token.functionId, async state => {
                             for (const i in f.args) {
-                                await this.execute(token.args[i]);
-                                state.replaceVariable(f.args[i], this.returnValue.value, this.returnValue.type, false);
+                                state.replaceVariable(f.args[i], args[i], types[i], false);
                             }
                         });
-                        //returnValue already updated by the "return" command if executed
-                        if (this.returnValue === null) this.context.throw(`Missing return statement after executing function ${token.functionId}`);
-                        break;
+                        if (result === null) this.context.throw(`Missing return statement after executing function ${token.functionId}`);
+                        return result;
                     }
                     case "closure": {
-                        await this.executeCommands(ScopeTypes.PLAIN, token.commands, "closure");
-                        break;
+                        return await this.executeCommands(ScopeTypes.PLAIN, token.commands, "closure");
                     }
-                    case "unary": {
-                        await this.execute(token.expr);
-                        let { value, type } = this.returnValue;
-                        switch (token.op) {
-                            case "!": {
-                                switch (type) {
-                                    case Types.BOOLEAN:
-                                        this.returnValue.value = !value;
-                                        this.returnValue.type = Types.BOOLEAN;
-                                        break;
-                                    default:
-                                        this.context.throw("The '!' operation requires a boolean value");
-                                }
+                    case "operation": {
+                        const args = [];
+                        const types = [];
+                        for (const expr of token.exprs) {
+                            const result = await this.execute(expr);
+                            if (result === null) this.context.throw(`Expression does not return a value`);
+                            if (result.type === null) this.context.throw(`Cannot coerce expression "${expr.debugData.text}" to a value`);
+                            args.push(result.value);
+                            types.push(result.type);
+                        }
+                        var o = this.context.scope.environment.lookupOperation(token.op, types);
+                        //try to resolve strings to images to find a matching operator
+                        if (o == null) {
+                            const toResolve = [];
+                            for (const i in types) if (types[i] == Types.STRING) {
+                                types[i] = Types.IMAGE;
+                                toResolve.push(i);
+                                o = this.context.scope.environment.lookupOperation(token.op, types);
+                                if (o != null) break;
                             }
-                            case "-": {
-                                switch (type) {
-                                    case Types.STRING:
-                                        value = await this.loadImage(value);
-                                    case Types.IMAGE:
-                                        this.returnValue.value = await this.elementWiseOperation(v => -v, value);
-                                        this.returnValue.type = Types.IMAGE;
-                                    default:
-                                        this.context.throw("The '!' operation requires a boolean value");
-                                }
+                            if (o == null) this.context.throw(`Unknown operation ${token.op} for types ${types.map(getTypeName)}`);
+                            for (const i of toResolve) {
+                                args[i] = await this.loadImage(args[i]);
                             }
-                            default:
-                                this.context.throw(`Unknown operation '${token.op}'`);
                         }
-                        break;
+                        return {
+                            value: await o.operation(...args),
+                            type: o.outputType
+                        };
                     }
-                    case "binary": {
-                        await this.execute(token.left);
-
-                        let { value: leftValue, type: leftType } = this.returnValue;
-                        if (leftType == Types.STRING) {
-                            leftValue = await this.loadImage(leftValue);
-                            leftType = Types.IMAGE;
-                        }
-
-                        await this.execute(token.right);
-                        let { value: rightValue, type: rightType } = this.returnValue;
-                        if (rightType == Types.STRING) {
-                            rightValue = await this.loadImage(rightValue);
-                            rightType = Types.IMAGE;
-                        }
-
-                        const combinedType = leftType + "-" + rightType;
-                        switch (token.op) {
-                            case "&&", "||":
-                                switch (combinedType) {
-                                    case Types.BOOLEAN + "-" + Types.BOOLEAN:
-                                        this.returnValue.value = token.op == "&&" ? leftValue && rightValue : leftValue || rightValue;
-                                        this.returnValue.type = Types.BOOLEAN;
-                                        break;
-                                    default:
-                                        this.context.throw(`The ${token.op} operation requires both boolean value`);
-                                }
-                                break;
-                            case "+": await this.applyElementWiseOperation(combinedType, token.op, (v, w) => v - w, rightValue, leftValue); break;
-                            case "-": await this.applyElementWiseOperation(combinedType, token.op, (v, w) => v + w, rightValue, leftValue); break;
-                            case "*": await this.applyElementWiseOperation(combinedType, token.op, (v, w) => v * w, rightValue, leftValue); break;
-                            case "/": await this.applyElementWiseOperation(combinedType, token.op, (v, w) => v / w, rightValue, leftValue); break;
-                            case "%": await this.applyElementWiseOperation(combinedType, token.op, (v, w) => v % w, rightValue, leftValue); break;
-                            case "**": await this.applyBlending(combinedType, rightValue, leftValue); break;
-                            default:
-                                this.context.throw(`Unknown operation '${token.op}'`);
-                        }
-                        break;
-                    }
+                    default:
+                        this.context.throw(`Unknown expr token '${token.type}'`);
                 }
                 break;
             }
             default:
-                this.context.throw(`Unknown token '${token.type}'`);
+                this.context.throw(`Unknown command token '${token.type}'`);
         }
     }
 
@@ -851,11 +920,13 @@ class Engine {
         const newScope = this.context.newScope(scopeType, name);
         await initState(newScope.state);
         this.context.pushScope(newScope);
+        let result;
         for (const command of commands) {
-            await this.execute(command);
+            result = await this.execute(command);
             if (!this.context.scope.isRunning) break;
         }
         this.context.popScope();
+        return result;
     }
 
     async createBlankImage(width, height) {
@@ -883,70 +954,113 @@ class Engine {
         return await sharp(image.data.buffer, { raw: { width, height, channels: image.info.channels } }).raw().toBuffer({ resolveWithObject: true });
     }
 
-    async elementWiseOperation(op, right, left) {
+    async applyElementWiseOperation(op, args) {
 
-        if (left === undefined) {
-            //unary
-            const { width, height, channels } = right.info;
-            const { data, info } = await this.createBlankImage(width, height);
-            const rightTexture = new Uint8ClampedArray(right.data.buffer);
-            const texture = new Uint8ClampedArray(data.buffer);
-            for (let i = 0; i < width * height * channels; i++) {
-                texture[i] = op(rightTexture[i] / 255) * 255;
-            }
+        switch (args.length) {
+            case 1: {
+                const value = args[0];
+                const { width, height, channels } = value.info;
+                const { data, info } = await this.createBlankImage(width, height);
+                const valueTexture = new Uint8ClampedArray(value.data.buffer);
+                const texture = new Uint8ClampedArray(data.buffer);
+                for (let i = 0; i < width * height * channels; i++) {
+                    texture[i] = op(valueTexture[i] / 255) * 255;
+                }
 
-            return { data, info };
-        }
-        else {
-            //binary
-            if (right.info.width != left.info.width || right.info.height != left.info.height) {
-                this.context.throw(`Incompatible sizes for operation '${op}': ${right.info.width}x${right.info.height} and ${left.info.width}x${left.info.height}`);
+                return { data, info };
             }
-            if (right.info.channels != left.info.channels) {
-                this.context.throw(`Incompatible formats for operation '${op}': ${right.info.channels} and ${left.info.channels}`);
-            }
+            case 2: {
+                const left = args[0];
+                const right = args[1];
+                if (right.info.width != left.info.width || right.info.height != left.info.height) {
+                    this.context.throw(`Incompatible sizes for operation '${op}': ${right.info.width}x${right.info.height} and ${left.info.width}x${left.info.height}`);
+                }
+                if (right.info.channels != left.info.channels) {
+                    this.context.throw(`Incompatible formats for operation '${op}': ${right.info.channels} and ${left.info.channels}`);
+                }
 
-            const { width, height, channels } = right.info;
-            const { data, info } = await this.createBlankImage(width, height);
-            const rightTexture = new Uint8ClampedArray(right.data.buffer);
-            const leftTexture = new Uint8ClampedArray(left.data.buffer);
-            const texture = new Uint8ClampedArray(data.buffer);
-            for (let i = 0; i < width * height * channels; i++) {
-                texture[i] = op(leftTexture[i] / 255, rightTexture[i] / 255) * 255;
+                const { width, height, channels } = left.info;
+                const { data, info } = await this.createBlankImage(width, height);
+                const leftTexture = new Uint8ClampedArray(left.data.buffer);
+                const rightTexture = new Uint8ClampedArray(right.data.buffer);
+                const texture = new Uint8ClampedArray(data.buffer);
+                for (let i = 0; i < width * height * channels; i++) {
+                    texture[i] = op(leftTexture[i] / 255, rightTexture[i] / 255) * 255;
+                }
+                return { data, info };
             }
-            return { data, info };
+            default:
+                this.context.throw("Unsupported operation");
         }
     }
 
-    async applyElementWiseOperation(combinedType, op, opFunction, right, left) {
-        switch (combinedType) {
-            case Types.IMAGE + "-" + Types.IMAGE:
-                this.returnValue.value = await this.elementWiseOperation(opFunction, right, left);
-                this.returnValue.type = Types.IMAGE;
-                break;
-            default:
-                this.context.throw(`The '${op}' operation requires both image value`);
-        }
+    async applyBlending(left, right) {
+        return await sharp(left.data.buffer, { raw: { width: left.info.width, height: left.info.height, channels: left.info.channels } })
+            .composite([{
+                input: right.data.buffer,
+                raw: { width: right.info.width, height: right.info.height, channels: right.info.channels },
+                blend: "over"
+            }])
+            .raw()
+            .toBuffer({ resolveWithObject: true });
     }
 
-    async applyBlending(combinedType, right, left) {
-        switch (combinedType) {
-            case Types.IMAGE + "-" + Types.IMAGE:
-                this.returnValue.value = await sharp(left.data.buffer, { raw: { width: left.info.width, height: left.info.height, channels: left.info.channels } })
-                    .composite([{
-                        input: right.data.buffer,
-                        raw: { width: right.info.width, height: right.info.height, channels: right.info.channels },
-                        blend: "over"
-                    }])
-                    .raw()
-                    .toBuffer({ resolveWithObject: true });
-                this.returnValue.type = Types.IMAGE;
-                break;
-            default:
-                this.context.throw(`The '${op}' operation requires both image value`);
-        }
+    async applyRotation(image, angle) {
+        return await sharp(image.data.buffer, { raw: { width: image.info.width, height: image.info.height, channels: image.info.channels } })
+            .rotate(angle * 180 / Math.PI)
+            .raw()
+            .toBuffer({ resolveWithObject: true });
     }
 }
+
+async function runFile(properties, syntaxFilename, codeFilename) {
+    try {
+        console.log("Reading syntax...");
+        const grammar = await readFile(syntaxFilename, "utf-8");
+        const parser = new Parser(Grammars.Custom.getRules(grammar), {});
+        console.log(`Reading program "${codeFilename}"...`);
+        const program = await readFile(codeFilename, "utf-8");
+
+        const parseTree = parser.getAST(program);
+
+        if (!parseTree) {
+            throw "Failed to parse file";
+        }
+        const ast = buildAst(parseTree);
+        if (properties.printAst) console.log("AST: " + JSON.stringify(ast, null, 4));
+
+        console.log("Executing...");
+
+        const engine = new Engine({
+            path: properties.imagesPath ?? "examples/simple/images",
+            debug: properties.debug
+        });
+
+        const result = await engine.execute(ast);
+        if (!result) {
+            console.log("No results");
+        }
+        else if (result.type == Types.IMAGE) {
+            const image = result.value;
+            const { width, height } = image.info;
+            await sharp(image.data.buffer, { raw: { width, height, channels: image.info.channels } })
+                .png()
+                .toFile("out.png");
+        }
+        else {
+            console.log(getVarString(result));
+        }
+    }
+    catch (err) {
+        console.error(err);
+    }
+}
+
+function repl(properties) {
+
+}
+
+
 
 const properties = {};
 
@@ -961,53 +1075,39 @@ for (const arg of process.argv.slice(2)) {
         properties[key] = value;
     }
 }
-console.log("Properties", properties);
+if (properties.debug) {
+    console.log("Properties", properties);
+}
 
-var syntaxFilename = "syntax.ebnf";
-var codeFilename = "test.tpl";
-syntaxFilename = "src/simpleSyntax.ebnf";
-codeFilename = "examples/simple/test1.tpl";
-
-if (properties.test) codeFilename = "examples/simple/" + properties.test + ".tpl";
-else if (properties.input) codeFilename = properties.input;
-if (properties.syntax) syntaxFilename = properties.syntax;
-const replMode = properties.repl !== undefined && properties.repl;
-
-try {
-    console.log("Reading syntax...");
-    const grammar = await readFile(syntaxFilename, "utf-8");
-    const parser = new Parser(Grammars.Custom.getRules(grammar), {});
-    console.log(`Reading program "${codeFilename}"...`);
-    const program = await readFile(codeFilename, "utf-8");
-
-    const parseTree = parser.getAST(program);
-
-    if (!parseTree) {
-        throw "Failed to parse file";
-    }
-    const ast = buildAst(parseTree);
-    if (properties.printAst) console.log("AST: " + JSON.stringify(ast, null, 4));
-
-    console.log("Executing...");
-
-    const engine = new Engine({
-        path: properties.imagesPath ?? "examples/simple/images",
-        debug: properties.debug
-    });
-
-    await engine.execute(ast);
-    const result = engine.returnValue.value;
-    if (!result) {
-        console.log("No results");
-    }
-    else {
-        const { width, height } = result.info;
-        await sharp(result.data.buffer, { raw: { width, height, channels: result.info.channels } })
-            .png()
-            .toFile("out.png");
+if (properties.help !== undefined) {
+    console.log("Usage: ");
+    console.log("Properties:");
+    for (const e of [
+        { name: "test", desc: "Specify test files as input file", usage: "<name_of_test>" },
+        { name: "input", desc: "Specify the input file path", usage: "<path_of_file>" },
+        { name: "syntax", desc: "Specify the syntax file path", usage: "<path_of_file>" },
+        { name: "repl", desc: "Starts in REPL mode" },
+        { name: "printAst", desc: "After parsing the file prints the full ast tree" },
+        { name: "imagesPath", desc: "Specify the root directory where images are resolved to", usage: "<path_of_directory>" },
+        { name: "debug", desc: "Run in debug mode" },
+    ]) {
+        console.log(`    ${e.name}${e.usage ? `=${e.usage}` : ""}`);
+        console.log(`        ${e.desc}`);
     }
 }
-catch (err) {
-    console.error(err);
+else if (properties.repl !== undefined && properties.repl) {
+    repl(properties);
+}
+else {
+    var syntaxFilename = "syntax.ebnf";
+    var codeFilename = "test.tpl";
+    syntaxFilename = "src/simpleSyntax.ebnf";
+    codeFilename = "examples/simple/test1.tpl";
+
+    if (properties.test) codeFilename = "examples/simple/" + properties.test + ".tpl";
+    else if (properties.input) codeFilename = properties.input;
+    if (properties.syntax) syntaxFilename = properties.syntax;
+
+    await runFile(properties, syntaxFilename, codeFilename);
 }
 
