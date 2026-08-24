@@ -31,8 +31,7 @@ Expr ::= BinRotateExpr
 /* add Formatting ~ ~? */
 /* add ApplyTransform ~<T> */
 BinRotateExpr     ::= UnaryExpr WS* RotateTypeOp WS* Expr | BinConcatExpr
-BinConcatExpr     ::= UnaryExpr WS* ConcatOp WS* Expr | BinReflectExpr
-BinReflectExpr    ::= UnaryExpr WS* ReflectOp WS* Expr | BinCompareExpr
+BinConcatExpr     ::= UnaryExpr WS* ConcatOp WS* Expr | BinCompareExpr
 BinCompareExpr    ::= UnaryExpr WS* CompareOp WS* Expr | BinAndExpr
 BinAndExpr        ::= UnaryExpr WS* AndOp WS* Expr | BinOrExpr
 BinOrExpr         ::= UnaryExpr WS* OrOp WS* Expr | BinAddSubExpr
@@ -49,11 +48,10 @@ AssignOp ::= BinaryOp? "="
 BinaryOp  ::= RotateTypeOp | ConcatOp | CompareOp | AndOp | OrOp | AddSubOp
     | MulDivRemOp | RangedOp | BlendOp
 
-UnaryOp   ::= ReflectOp | "-" | "!"
-ReflectOp ::= "/" | "\\"
+UnaryOp   ::= "|" | "#" | "-" | "!"
 
 RotateTypeOp ::= "@"   | "!@"
-ConcatOp     ::= "|<"  | "|>"  | "|v"  | "|^"  | "|<^" | "|<v" | "|>v" | "|<^"
+ConcatOp     ::= "|<^" | "|<v" | "|>v" | "|>^" | "|<"  | "|>"  | "|v"  | "|^"
 CompareOp    ::= "=="  | "!="  | ">="  | ">"   | "<="  | "<"
 AndOp        ::= "&&"
 OrOp         ::= "||"

@@ -26,4 +26,4 @@ while (i < 20) {
     print "newIcon: %s, index: %s, action: %s"(newIcon, i, { if (testPredicate(i)) return "rotate"; return "idle"; });
 }
 
-return icon;
+return #(|icon) |>v newIcon;

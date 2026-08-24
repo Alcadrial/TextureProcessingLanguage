@@ -377,8 +377,8 @@ class AstBuilder {
                     tokenType: "expr",
                     debugData: this.getDebugData(token),
                     type: "operation",
-                    op: e.children[0].text.trim(),
-                    exprs: [this.buildAstExpr(e.children[1])]
+                    op: e.text.trim(),
+                    exprs: [this.buildAstExpr(token.children[1])]
                 };
             }
             case "CallExpr": {
@@ -670,6 +670,8 @@ class Engine {
         (e => {
             e.bindOperation("!", [Types.BOOLEAN], Types.BOOLEAN, (v) => !v);
             e.bindOperation("-", [Types.NUMBER], Types.NUMBER, (v) => -v);
+            e.bindOperation("|", [Types.IMAGE], Types.IMAGE, async (v) => await this.applyFlop(v));
+            e.bindOperation("#", [Types.IMAGE], Types.IMAGE, async (v) => await this.applySharpen(v));
 
             e.bindOperation("==", [Types.NUMBER, Types.NUMBER], Types.BOOLEAN, (v, w) => v == w);
             e.bindOperation("==", [Types.BOOLEAN, Types.BOOLEAN], Types.BOOLEAN, (v, w) => v == w);
@@ -696,6 +698,15 @@ class Engine {
 
             e.bindOperation("@", [Types.IMAGE, Types.NUMBER], Types.IMAGE, async (v, i) => await this.applyRotation(v, i));
             e.bindOperation("!@", [Types.IMAGE, Types.NUMBER], Types.IMAGE, async (v, i) => await this.applyRotation(v, -i));
+
+            e.bindOperation("|<", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyConcat(v, w, -1, 0));
+            e.bindOperation("|>", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyConcat(v, w, 1, 0));
+            e.bindOperation("|v", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyConcat(v, w, 0, 1));
+            e.bindOperation("|^", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyConcat(v, w, 0, -1));
+            e.bindOperation("|<^", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyConcat(v, w, -1, -1));
+            e.bindOperation("|<v", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyConcat(v, w, -1, 1));
+            e.bindOperation("|>v", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyConcat(v, w, 1, 1));
+            e.bindOperation("|>^", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyConcat(v, w, 1, -1));
 
         })(this.context.scope.environment);
 
@@ -1012,6 +1023,87 @@ class Engine {
     async applyRotation(image, angle) {
         return await sharp(image.data.buffer, { raw: { width: image.info.width, height: image.info.height, channels: image.info.channels } })
             .rotate(angle * 180 / Math.PI, { color: "#00000000" })
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+    }
+
+    async applyReflect(image, angle) {
+        return await sharp(image.data.buffer, { raw: { width: image.info.width, height: image.info.height, channels: image.info.channels } })
+            .rotate(-angle * 180 / Math.PI, { color: "#00000000" })
+            .flop()
+            .rotate(angle * 180 / Math.PI, { color: "#00000000" })
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+    }
+
+    async applyFlop(image) {
+        return await sharp(image.data.buffer, { raw: { width: image.info.width, height: image.info.height, channels: image.info.channels } })
+            .flop()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+    }
+
+    async applySharpen(image) {
+        return await sharp(image.data.buffer, { raw: { width: image.info.width, height: image.info.height, channels: image.info.channels } })
+            .sharpen()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+    }
+
+    async applyConcat(image0, image1, xRelative, yRelative) {
+
+        const w0 = image0.info.width;
+        const h0 = image0.info.height;
+        const w1 = image1.info.width;
+        const h1 = image1.info.height;
+
+        if (xRelative == 0) {
+            if (yRelative == 0) return await this.applyBlending(image0, image1);
+            return await sharp(image1.data.buffer, { raw: { width: w1, height: h1, channels: image1.info.channels } })
+                .resize(Math.max(w0, w1), h0 + h1, {
+                    fit: "contain",
+                    position: yRelative < 0 ? "top" : "bottom"
+            })
+                .composite([{
+                    input: image0.data.buffer,
+                    raw: { width: w0, height: h0, channels: image0.info.channels },
+                    blend: "over",
+                    top: yRelative < 0 ? h1 : 0,
+                    left: 0,
+                }])
+                .raw()
+                .toBuffer({ resolveWithObject: true });
+        }
+        else if (yRelative == 0) {
+            return await sharp(image1.data.buffer, { raw: { width: w1, height: h1, channels: image1.info.channels } })
+                .resize(w0 + w1, Math.max(h0, h1), {
+                    fit: "contain",
+                    position: xRelative < 0 ? "left" : "right"
+                })
+                .composite([{
+                    input: image0.data.buffer,
+                    raw: { width: w0, height: h0, channels: image0.info.channels },
+                    blend: "over",
+                    left: xRelative < 0 ? w1 : 0,
+                    top: 0
+                }])
+                .raw()
+                .toBuffer({ resolveWithObject: true });
+        }
+        const i = xRelative + 1 + (yRelative + 1) / 2;
+        return await sharp(image1.data.buffer, { raw: { width: w1, height: h1, channels: image1.info.channels } })
+            .resize(w0 + w1, h0 + h1, {
+                fit: "contain",
+                position: ["northwest", "southwest", "northeast", "southeast"][i],
+                withoutEnlargement: true
+            })
+            .composite([{
+                input: image0.data.buffer,
+                raw: { width: w0, height: h0, channels: image0.info.channels },
+                blend: "over",
+                left: xRelative < 0 ? w1 : 0,
+                top: yRelative < 0 ? h1 : 0
+            }])
             .raw()
             .toBuffer({ resolveWithObject: true });
     }
