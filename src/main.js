@@ -290,7 +290,7 @@ class AstBuilder {
                             debugData: this.getDebugData(commandToken),
                             condition: this.buildAstExpr(commandToken.children[0]),
                             commands: this.buildAst(commandToken.children[1]).filter(c => c)/* as Command[] */,
-                            elseCommands: this.buildAst(commandToken.children[2]).filter(c => c)/* as Command[] */
+                            elseCommands: this.buildAst(commandToken.children[2])?.filter(c => c)/* as Command[] */
                         };
                     }
                     case "Closure": {
@@ -343,10 +343,8 @@ class AstBuilder {
     //Tries to parse a "Program" token
     //Tries to parse an "Expr" token or any component of it, pruning meaningless tokens
     buildAstExpr(token) {
-        //Forward "Expr" token
         if (token.type == "Expr") return this.buildAstExpr(token.children[0]);
 
-        //Any binary expression token begins with "Bin"
         if (token.type.substring(0, 3) == "Bin") {
             //Search for a binary expression
             let expr = token;
@@ -356,7 +354,6 @@ class AstBuilder {
             while (!e2) {
                 expr = e0;
                 kind = expr.type;
-                //no binary expression found
                 if (kind.substring(0, 3) != "Bin") return this.buildAstExpr(expr);
                 e0 = expr.children[0];
                 e2 = expr.children[2];
@@ -369,7 +366,7 @@ class AstBuilder {
                 exprs: [this.buildAstExpr(e0), this.buildAstExpr(e2)]
             };
         }
-        //Not a binary expression
+        //Search for an unary expression
         switch (token.type) {
             case "UnaryExpr": {
                 const e = token.children[0];
@@ -473,7 +470,8 @@ function getTypeName(type) {
 const ScopeTypes = {
     GLOBAL: 0,
     LOOP: 1,
-    PLAIN: 2
+    PLAIN: 2,
+    CLOSURE: 3
 }
 
 function getScopeTypeName(type) {
@@ -736,7 +734,12 @@ class Engine {
                 break;
             }
             case "return": {
+                this.context.scope.return = true;
                 this.context.scope.isRunning = false;
+                for (let s = this.context.scope; s.type != ScopeTypes.CLOSURE && s.type != ScopeTypes.GLOBAL; s = s.higherScope) {
+                    s.higherScope.return = true;
+                    s.higherScope.isRunning = false;
+                }
                 const result = await this.execute(token.expr);
                 if (this.context.scope.type == ScopeTypes.GLOBAL) {
                     if (result.type == Types.STRING) {
@@ -780,7 +783,7 @@ class Engine {
                 const f = this.context.scope.environment.lookupFunction(token.id);
                 if (f === undefined) this.context.throw(`Function ${token.id} not found`);
 
-                return await this.executeCommands(ScopeTypes.PLAIN, f.commands, token.id, async state => {
+                return await this.executeCommands(ScopeTypes.CLOSURE, f.commands, token.id, async state => {
                     for (const i in f.args) {
                         state.replaceVariable(f.args[i], args[i], types[i], false);
                     }
@@ -790,7 +793,8 @@ class Engine {
                 let condition = await this.execute(token.condition);
                 if (condition.type != Types.BOOLEAN) this.context.throw(`Value of type ${getTypeName(condition.type)} cannot be casted to boolean`);
                 while (condition.value) {
-                    await this.executeCommands(ScopeTypes.LOOP, token.commands);
+                    let result = await this.executeCommands(ScopeTypes.LOOP, token.commands);
+                    if (this.context.scope.return) return result;
                     if (this.context.scope.break) break;
                     condition = await this.execute(token.condition);
                     if (condition.type != Types.BOOLEAN) this.context.throw(`Value of type ${getTypeName(condition.type)} cannot be casted to boolean`);
@@ -810,18 +814,18 @@ class Engine {
                 break;
             }
             case "if": {
-                const result = await this.execute(token.condition);
+                let result = await this.execute(token.condition);
                 if (result.type != Types.BOOLEAN) this.context.throw(`Value of type ${getTypeName(result.type)} cannot be casted to boolean`);
                 if (result.value) {
-                    await this.executeCommands(ScopeTypes.PLAIN, token.commands);
+                    result = await this.executeCommands(ScopeTypes.PLAIN, token.commands);
                 }
                 else if (token.elseCommands) {
-                    await this.executeCommands(ScopeTypes.PLAIN, token.elseCommands);
+                    result = await this.executeCommands(ScopeTypes.PLAIN, token.elseCommands);
                 }
-                break;
+                return result;
             }
             case "closure": {
-                return await this.executeCommands(ScopeTypes.PLAIN, token.commands, "closure");
+                return await this.executeCommands(ScopeTypes.CLOSURE, token.commands, "closure");
             }
             case "function": {
                 this.context.scope.environment.bindFunctions(token.id, {
@@ -865,7 +869,7 @@ class Engine {
                         const f = this.context.scope.environment.lookupFunction(token.functionId);
                         if (f === undefined) this.context.throw(`Function ${token.functionId} not found`);
 
-                        const result = await this.executeCommands(ScopeTypes.PLAIN, f.commands, token.functionId, async state => {
+                        const result = await this.executeCommands(ScopeTypes.CLOSURE, f.commands, token.functionId, async state => {
                             for (const i in f.args) {
                                 state.replaceVariable(f.args[i], args[i], types[i], false);
                             }
@@ -874,7 +878,7 @@ class Engine {
                         return result;
                     }
                     case "closure": {
-                        return await this.executeCommands(ScopeTypes.PLAIN, token.commands, "closure");
+                        return await this.executeCommands(ScopeTypes.CLOSURE, token.commands, "closure");
                     }
                     case "operation": {
                         const args = [];
@@ -999,7 +1003,7 @@ class Engine {
             .composite([{
                 input: right.data.buffer,
                 raw: { width: right.info.width, height: right.info.height, channels: right.info.channels },
-                blend: "over"
+                blend: "over",
             }])
             .raw()
             .toBuffer({ resolveWithObject: true });
@@ -1007,9 +1011,31 @@ class Engine {
 
     async applyRotation(image, angle) {
         return await sharp(image.data.buffer, { raw: { width: image.info.width, height: image.info.height, channels: image.info.channels } })
-            .rotate(angle * 180 / Math.PI)
+            .rotate(angle * 180 / Math.PI, { color: "#00000000" })
             .raw()
             .toBuffer({ resolveWithObject: true });
+    }
+}
+
+async function printAst(properties, syntaxFilename, codeFilename) {
+
+    try {
+        console.log("Reading syntax...");
+        const grammar = await readFile(syntaxFilename, "utf-8");
+        const parser = new Parser(Grammars.Custom.getRules(grammar), {});
+        console.log(`Reading program "${codeFilename}"...`);
+        const program = await readFile(codeFilename, "utf-8");
+
+        const parseTree = parser.getAST(program);
+
+        if (!parseTree) {
+            throw "Failed to parse file";
+        }
+        const ast = buildAst(parseTree);
+        console.log("AST: " + JSON.stringify(ast, null, 4));
+    }
+    catch (err) {
+        console.error(err);
     }
 }
 
@@ -1027,7 +1053,6 @@ async function runFile(properties, syntaxFilename, codeFilename) {
             throw "Failed to parse file";
         }
         const ast = buildAst(parseTree);
-        if (properties.printAst) console.log("AST: " + JSON.stringify(ast, null, 4));
 
         console.log("Executing...");
 
@@ -1056,7 +1081,7 @@ async function runFile(properties, syntaxFilename, codeFilename) {
     }
 }
 
-function repl(properties) {
+async function repl(properties) {
 
 }
 
@@ -1079,6 +1104,8 @@ if (properties.debug) {
     console.log("Properties", properties);
 }
 
+properties.mode = properties.mode?.toLowerCase() ?? "run";
+
 if (properties.help !== undefined) {
     console.log("Usage: ");
     console.log("Properties:");
@@ -1086,8 +1113,7 @@ if (properties.help !== undefined) {
         { name: "test", desc: "Specify test files as input file", usage: "<name_of_test>" },
         { name: "input", desc: "Specify the input file path", usage: "<path_of_file>" },
         { name: "syntax", desc: "Specify the syntax file path", usage: "<path_of_file>" },
-        { name: "repl", desc: "Starts in REPL mode" },
-        { name: "printAst", desc: "After parsing the file prints the full ast tree" },
+        { name: "mode", desc: "Specify the run mode (default: run), when in \"run\" execute the given input, when in \"repl\" starts a REPL environment, when in \"ast\" parses and prints the input's ast tree and return", usage: "{ run | repl | ast }" },
         { name: "imagesPath", desc: "Specify the root directory where images are resolved to", usage: "<path_of_directory>" },
         { name: "debug", desc: "Run in debug mode" },
     ]) {
@@ -1095,8 +1121,8 @@ if (properties.help !== undefined) {
         console.log(`        ${e.desc}`);
     }
 }
-else if (properties.repl !== undefined && properties.repl) {
-    repl(properties);
+else if (properties.mode == "repl") {
+    await repl(properties);
 }
 else {
     var syntaxFilename = "syntax.ebnf";
@@ -1108,6 +1134,13 @@ else {
     else if (properties.input) codeFilename = properties.input;
     if (properties.syntax) syntaxFilename = properties.syntax;
 
-    await runFile(properties, syntaxFilename, codeFilename);
+    if (properties.mode == "ast") {
+        await printAst(properties, syntaxFilename, codeFilename);
+    }
+    else if (properties.mode == "run") {
+        await runFile(properties, syntaxFilename, codeFilename);
+    }
+    else {
+        console.log("Mode not recognized: " + properties.mode);
+    }
 }
-

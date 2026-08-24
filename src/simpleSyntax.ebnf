@@ -30,27 +30,30 @@ FunctionArgs ::= "(" WS* ((Identifier "," WS*)* Identifier)? ")"
 Expr ::= BinRotateExpr
 /* add Formatting ~ ~? */
 /* add ApplyTransform ~<T> */
-BinRotateExpr          ::= UnaryExpr WS* RotateTypeOp WS* Expr | BinReflectExpr
-BinConcatExpr          ::= UnaryExpr WS* ConcatOp WS* Expr | BinReflectExpr
-BinReflectExpr         ::= UnaryExpr WS* ReflectOp WS* Expr | BinCompareExpr
-BinCompareExpr         ::= UnaryExpr WS* CompareOp WS* Expr | BinAndExpr
-BinAndExpr             ::= UnaryExpr WS* AndOp WS* Expr | BinOrExpr
-BinOrExpr              ::= UnaryExpr WS* OrOp WS* Expr | BinAddSubExpr
-BinAddSubExpr          ::= UnaryExpr WS* AddSubOp WS* Expr | BinMulDivRemExpr
-BinMulDivRemExpr       ::= UnaryExpr WS* MulDivRemOp WS* Expr | BinRangedExpr
-BinRangedExpr          ::= UnaryExpr WS* RangedOp WS* Expr | BinBlendingExpr
-BinBlendingExpr        ::= UnaryExpr WS* BlendOp WS* Expr | UnaryExpr
-UnaryExpr              ::= (UnaryOp WS*)? CallExpr
-CallExpr               ::= Identifier CallArgs WS* | BracketExpr
-BracketExpr            ::= "(" WS* Expr ")" WS* | ClosureExpr
-ClosureExpr            ::= Closure WS* | Value
+BinRotateExpr     ::= UnaryExpr WS* RotateTypeOp WS* Expr | BinConcatExpr
+BinConcatExpr     ::= UnaryExpr WS* ConcatOp WS* Expr | BinReflectExpr
+BinReflectExpr    ::= UnaryExpr WS* ReflectOp WS* Expr | BinCompareExpr
+BinCompareExpr    ::= UnaryExpr WS* CompareOp WS* Expr | BinAndExpr
+BinAndExpr        ::= UnaryExpr WS* AndOp WS* Expr | BinOrExpr
+BinOrExpr         ::= UnaryExpr WS* OrOp WS* Expr | BinAddSubExpr
+BinAddSubExpr     ::= UnaryExpr WS* AddSubOp WS* Expr | BinMulDivRemExpr
+BinMulDivRemExpr  ::= UnaryExpr WS* MulDivRemOp WS* Expr | BinRangedExpr
+BinRangedExpr     ::= UnaryExpr WS* RangedOp WS* Expr | BinBlendingExpr
+BinBlendingExpr   ::= UnaryExpr WS* BlendOp WS* Expr | UnaryExpr
+UnaryExpr         ::= (UnaryOp WS*)? CallExpr
+CallExpr          ::= Identifier CallArgs WS* | BracketExpr
+BracketExpr       ::= "(" WS* Expr ")" WS* | ClosureExpr
+ClosureExpr       ::= Closure WS* | Value
 
 AssignOp ::= BinaryOp? "="
-BinaryOp ::= "+" | "-" | "*" | "**" | "&&" | "||" | "<@" | ">@" | "@"
-UnaryOp  ::= "-" | "!"
+BinaryOp  ::= RotateTypeOp | ConcatOp | CompareOp | AndOp | OrOp | AddSubOp
+    | MulDivRemOp | RangedOp | BlendOp
+
+UnaryOp   ::= ReflectOp | "-" | "!"
+ReflectOp ::= "/" | "\\"
+
 RotateTypeOp ::= "@"   | "!@"
 ConcatOp     ::= "|<"  | "|>"  | "|v"  | "|^"  | "|<^" | "|<v" | "|>v" | "|<^"
-ReflectOp    ::= "<|>" | "<->" | "</>" | "<\\>"
 CompareOp    ::= "=="  | "!="  | ">="  | ">"   | "<="  | "<"
 AndOp        ::= "&&"
 OrOp         ::= "||"
