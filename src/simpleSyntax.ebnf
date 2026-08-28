@@ -1,5 +1,5 @@
 
-Program ::= (WS* Command)* WS* EOF
+Program ::= (WS* Command)* WS* EOF | Expr EOF
 
 Exec    ::= Closure | Command
 Closure ::= "{" (WS* Command)* WS* "}"

@@ -130,8 +130,8 @@ type Expr = {
 type Identifier = string
 */
 
-function buildAst(token) {
-    return new AstBuilder(token).buildAst(token);
+function buildAst(token, allowFullExpr = false) {
+    return new AstBuilder(token).buildAst(token, allowFullExpr);
 }
 
 class AstBuilder {
@@ -168,11 +168,18 @@ class AstBuilder {
         };
     }
 
-    buildAst(token) {
+    buildAst(token, allowFullExpr = false) {
         if (!token) return undefined;
 
         switch (token.type) {
             case "Program": {
+                if (token.children[0]?.type == "Expr") {
+                    if (!allowFullExpr) {
+                        console.log("Expr not allowed");
+                        return undefined;
+                    }
+                    return this.buildAstExpr(token.children[0]);
+                }
                 return {
                     tokenType: "program",
                     commands: token.children.map(t => this.buildAst(t))/* as Command[] */,
@@ -297,7 +304,7 @@ class AstBuilder {
                         return {
                             tokenType: "closure",
                             debugData: this.getDebugData(commandToken),
-                            commands: this.buildAst(commandToken.children[0]).filter(c => c)/* as Command[] */
+                            commands: commandToken.children.map(t => this.buildAst(t)).filter(c => c)/* as Command[] */
                         };
                     }
                     case "Function": {
@@ -316,7 +323,7 @@ class AstBuilder {
             }
             case "Expr": {
                 return {
-                    tokenType: "Expr",
+                    tokenType: "expr",
                     debugData: this.getDebugData(token),
                     expr: this.buildAstExpr(token.children[0])
                 };
@@ -922,23 +929,29 @@ class Engine {
                         };
                     }
                     default:
-                        this.context.throw(`Unknown expr token '${token.type}'`);
+                        this.context.throw(`Unknown expr token '${token.tokenType}'`);
                 }
                 break;
             }
             default:
-                this.context.throw(`Unknown command token '${token.type}'`);
+                this.context.throw(`Unknown command token '${token.tokenType}'`);
         }
     }
 
-    async executeCommands(scopeType, commands, name, initState = async state => { }) {
+    async executeCommands(scopeType, commands, name, initState = async _ => { }) {
         const newScope = this.context.newScope(scopeType, name);
         await initState(newScope.state);
         this.context.pushScope(newScope);
         let result;
-        for (const command of commands) {
-            result = await this.execute(command);
-            if (!this.context.scope.isRunning) break;
+        try {
+            for (const command of commands) {
+                result = await this.execute(command);
+                if (!this.context.scope.isRunning) break;
+            }
+        }
+        catch (err) {
+            this.context.popScope();
+            throw err;
         }
         this.context.popScope();
         return result;
@@ -1063,7 +1076,7 @@ class Engine {
                 .resize(Math.max(w0, w1), h0 + h1, {
                     fit: "contain",
                     position: yRelative < 0 ? "top" : "bottom"
-            })
+                })
                 .composite([{
                     input: image0.data.buffer,
                     raw: { width: w0, height: h0, channels: image0.info.channels },
@@ -1173,7 +1186,48 @@ async function runFile(properties, syntaxFilename, codeFilename) {
     }
 }
 
-async function repl(properties) {
+async function repl(properties, syntaxFilename) {
+    const grammar = await readFile(syntaxFilename, "utf-8");
+    const parser = new Parser(Grammars.Custom.getRules(grammar), {});
+
+    const engine = new Engine({
+        path: properties.imagesPath ?? "examples/simple/images",
+        debug: properties.debug
+    });
+
+    var rl = await import('readline-sync');
+    while (true) {
+        var line = rl.question("> ");
+        if (line == "exit" || line == "stop") {
+            return;
+        }
+        let parseTree = parser.getAST(line);
+        if (!parseTree && !line.endsWith(";")) parseTree = parser.getAST(line + ";");
+        if (!parseTree) {
+            console.log("Failed to parse line");
+        }
+        else {
+            try {
+                const ast = buildAst(parseTree, true);
+                const result = await engine.execute(ast);
+                if (result) {
+                    if (result.type == Types.IMAGE) {
+                        const image = result.value;
+                        const { width, height } = image.info;
+                        await sharp(image.data.buffer, { raw: { width, height, channels: image.info.channels } })
+                            .png()
+                            .toFile("out.png");
+                    }
+                    else {
+                        console.log(getVarString(result));
+                    }
+                }
+            }
+            catch (err) {
+                console.log(err)
+            }
+        }
+    }
 
 }
 
@@ -1214,7 +1268,12 @@ if (properties.help !== undefined) {
     }
 }
 else if (properties.mode == "repl") {
-    await repl(properties);
+    var syntaxFilename = "syntax.ebnf";
+    syntaxFilename = "src/simpleSyntax.ebnf";
+
+    if (properties.syntax) syntaxFilename = properties.syntax;
+
+    await repl(properties, syntaxFilename);
 }
 else {
     var syntaxFilename = "syntax.ebnf";
