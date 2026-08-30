@@ -1,6 +1,6 @@
 signal "Begin";
 
-const mask = "mask.png";
+const mask = "mask0.png";
 signal;
 
 var newIcon = {

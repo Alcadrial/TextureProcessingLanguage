@@ -29,4 +29,4 @@ while (i < 20) {
     var temp = 14;
 }
 
-return #(|icon) |>v newIcon;
+return (#(|icon) ** "mask1.png") |>v newIcon[2,6->8,18];

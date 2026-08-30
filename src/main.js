@@ -62,7 +62,7 @@ type Decl = ({
     tokenType: "const";
     debugData: DebugData;
     id: Identifier;
-    init: string;
+    init: Expr;
 } | {
     tokenType: "var";
     debugData: DebugData;
@@ -120,6 +120,8 @@ type Expr = {
 } | {
     type: "id";
     id: Identifier;
+} | {
+    type: "empty";
 } | {
     type: "boolean" | "string" | "number";
     value: string;
@@ -235,7 +237,7 @@ class AstBuilder {
                                     tokenType: "const",
                                     debugData: this.getDebugData(declVariantToken),
                                     id: this.buildAst(declVariantToken.children[0])/* as Identifier */,
-                                    init: this.buildAst(declVariantToken.children[1])/* as string */
+                                    init: this.buildAstExpr(declVariantToken.children[1])/* as Expr */
                                 };
                             }
                             case "DeclVar": {
@@ -342,7 +344,7 @@ class AstBuilder {
                 return token.text.trim().substring(1, token.text.length - 1);
             }
             default: {
-                console.log("Unknown token " + token.type)
+                console.log("Unknown token " + token.type);
                 return undefined;
             }
         }
@@ -377,7 +379,7 @@ class AstBuilder {
         switch (token.type) {
             case "UnaryExpr": {
                 const e = token.children[0];
-                if (e.type == "CallExpr") {
+                if (e.type == "RangeExpr") {
                     return this.buildAstExpr(e);
                 }
                 return {
@@ -386,6 +388,43 @@ class AstBuilder {
                     type: "operation",
                     op: e.text.trim(),
                     exprs: [this.buildAstExpr(token.children[1])]
+                };
+            }
+            case "RangeExpr": {
+                if (token.children.length == 1) {
+                    return this.buildAstExpr(token.children[0]);
+                }
+                return {
+                    tokenType: "expr",
+                    debugData: this.getDebugData(token),
+                    type: "operation",
+                    op: "[->]",
+                    exprs: token.children.map(e0 => this.buildAstExpr(e0))
+                };
+            }
+            case "ResizeExpr": {
+                if (token.children.length == 1) {
+                    return this.buildAstExpr(token.children[0]);
+                }
+                return {
+                    tokenType: "expr",
+                    debugData: this.getDebugData(token),
+                    type: "operation",
+                    op: "{}",
+                    exprs: token.children.map(e0 => this.buildAstExpr(e0))
+                };
+            }
+            case "PostfixUnaryExpr": {
+                const e = token.children[1];
+                if (!e) {
+                    return this.buildAstExpr(token.children[0]);
+                }
+                return {
+                    tokenType: "expr",
+                    debugData: this.getDebugData(token),
+                    type: "operation",
+                    op: e.text.trim(),
+                    exprs: [baseExpr, this.buildAstExpr(token.children[1])]
                 };
             }
             case "CallExpr": {
@@ -416,7 +455,8 @@ class AstBuilder {
                     commands: e.children.map(t => this.buildAst(t)).filter(c => c)
                 };
             }
-            case "Identifier": {
+            case "Identifier":
+            case "Empty": {
                 return {
                     tokenType: "expr",
                     debugData: this.getDebugData(token),
@@ -457,7 +497,7 @@ class AstBuilder {
                 };
             }
             default: {
-                return undefined;
+                console.log("Unknown expr token " + token.type);
             }
         }
     }
@@ -465,13 +505,14 @@ class AstBuilder {
 
 const Types = {
     IMAGE: 0,
-    STRING: 1,
-    BOOLEAN: 2,
-    NUMBER: 3
+    EMPTY: 1,
+    STRING: 2,
+    BOOLEAN: 3,
+    NUMBER: 4
 }
 
 function getTypeName(type) {
-    return ["image", "string", "boolean", "number"][type] ?? "unknown";
+    return ["image", "empty", "string", "boolean", "number"][type] ?? "unknown";
 }
 
 const ScopeTypes = {
@@ -495,6 +536,8 @@ function getVarString(variable) {
         case Types.IMAGE:
             const info = variable.value.info;
             return `{Image ${info.width}x${info.height}}`;
+        case Types.EMPTY:
+            return "empty";
         default:
             return "{unknown object}";
     }
@@ -589,7 +632,8 @@ class Environment {
         return this.operations[`${name} ${inputTypes}`];
     }
 
-    bindFunctions(name, f) {
+    bindFunctions(name, f, context) {
+        if (this.functions[name]) context.throw(`Cannot replace previous defined function "${name}"`);
         this.functions[name] = f;
     }
 
@@ -608,18 +652,21 @@ class State {
         else {
             this.variables = {};
         }
+        //init built-in variables
+        this.builtinVariables = {
+            empty: {
+                name: "empty",
+                type: Types.EMPTY
+            }
+        };
     }
 
     addVariable(name, value, type, isConst, context) {
+        if (Object.keys(this.builtinVariables).indexOf(name) != -1) context.throw(`Cannot redeclare a built-in variable: ${name}`);
         if (this.variables[name]) context.throw("Duplicate declaration of " + name);
         if (isConst) {
-            if (type !== Types.STRING) context.throw("Const declaration is supported only for strings");
-            this.variables[name] = {
-                name,
-                value,
-                type,
-                isConst: true
-            };
+            if (value === null || value === undefined || type === null | type === undefined) context.throw("Cannot declare a const variable without initialization (" + name + ")");
+            this.variables[name] = { name, value, type, isConst };
             return;
         }
         if (type == null) {
@@ -635,6 +682,7 @@ class State {
     }
 
     setVariable(name, value, type, context) {
+        if (Object.keys(this.builtinVariables).indexOf(name) != -1) context.throw(`Cannot redeclare a built-in variable: ${name}`);
         const varr = this.variables[name];
         if (!varr) context.throw(`Missing declaration of ${name}`);
         if (!this.isAssignableTo(type, varr.type)) context.throw(`Incompatible assignment of type ${type} into a variable of type ${varr.type}`);
@@ -648,10 +696,13 @@ class State {
         }
         if (valueType == varType) return true;
         if (varType == Types.STRING && valueType == Types.IMAGE) return true;
+        if (varType == Types.EMPTY && valueType == Types.IMAGE) return true;
+        if (varType == Types.IMAGE && valueType == Types.EMPTY) return true;
         return false;
     }
 
-    replaceVariable(name, value, type, isConst) {
+    replaceVariable(name, value, type, isConst, context) {
+        if (Object.keys(this.builtinVariables).indexOf(name) != -1) context.throw(`Cannot redeclare a built-in variable: ${name}`);
         this.variables[name] = {
             name,
             value,
@@ -661,7 +712,7 @@ class State {
     }
 
     getVariable(name, context) {
-        const varr = this.variables[name];
+        const varr = this.builtinVariables[name] ?? this.variables[name];
         if (!varr) context.throw(`Variable ${name} not declared`);
         return varr;
     }
@@ -696,11 +747,11 @@ class Engine {
             e.bindOperation("/", [Types.NUMBER, Types.NUMBER], Types.NUMBER, (v, w) => v / w);
             e.bindOperation("%", [Types.NUMBER, Types.NUMBER], Types.NUMBER, (v, w) => v % w);
 
-            e.bindOperation("+", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 + c1, [v, w]));
-            e.bindOperation("-", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 - c1, [v, w]));
-            e.bindOperation("*", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 * c1, [v, w]));
-            e.bindOperation("/", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 / c1, [v, w]));
-            e.bindOperation("%", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 % c1, [v, w]));
+            e.bindOperation("+", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 + c1, "+", [v, w]));
+            e.bindOperation("-", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 - c1, "-", [v, w]));
+            e.bindOperation("*", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 * c1, "*", [v, w]));
+            e.bindOperation("/", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 / c1, "/", [v, w]));
+            e.bindOperation("%", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyElementWiseOperation((c0, c1) => c0 % c1, "%", [v, w]));
             e.bindOperation("**", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyBlending(v, w));
 
             e.bindOperation("@", [Types.IMAGE, Types.NUMBER], Types.IMAGE, async (v, i) => await this.applyRotation(v, i));
@@ -715,10 +766,33 @@ class Engine {
             e.bindOperation("|>v", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyConcat(v, w, 1, 1));
             e.bindOperation("|>^", [Types.IMAGE, Types.IMAGE], Types.IMAGE, async (v, w) => await this.applyConcat(v, w, 1, -1));
 
+            e.bindOperation("[->]", [Types.IMAGE, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.NUMBER], Types.IMAGE, async (v, x0, y0, x1, y1) => await this.applyRange(v, { x: x0, y: y0 }, { x: x1, y: y1 }, "#00000000"));
+            e.bindOperation("[->]", [Types.IMAGE, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.STRING], Types.IMAGE, async (v, x0, y0, x1, y1, c) => await this.applyRange(v, { x: x0, y: y0 }, { x: x1, y: y1 }, c));
+            e.bindOperation("[->]", [Types.EMPTY, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.NUMBER], Types.IMAGE, async (_, x0, y0, x1, y1) => await this.createBlankImage(x1 - x0, y1 - y0, "#00000000"));
+            e.bindOperation("[->]", [Types.EMPTY, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.STRING], Types.IMAGE, async (_, x0, y0, x1, y1, c) => await this.createBlankImage(x1 - x0, y1 - y0, c));
+            e.bindOperation("{}", [Types.IMAGE, Types.NUMBER, Types.NUMBER], Types.IMAGE, async (v, w, h) => await this.applyResize(v, w, h, "nearest"));
+            e.bindOperation("{}", [Types.IMAGE, Types.NUMBER, Types.NUMBER, Types.STRING], Types.IMAGE, async (v, w, h, s) => await this.applyResize(v, w, h, s));
+            e.bindOperation("{}", [Types.EMPTY, Types.NUMBER, Types.NUMBER], Types.IMAGE, async (_, w, h) => await this.createBlankImage(w, h));
+            e.bindOperation("{}", [Types.EMPTY, Types.NUMBER, Types.NUMBER, Types.STRING], Types.IMAGE, async (_, w, h, s) => await this.createBlankImage(w, h, s));
+
+            e.bindFunctions("width", {
+                args: "image",
+                types: [Types.IMAGE],
+                returnType: Types.NUMBER,
+                handle: image => image.info.width
+            }, this.context);
+            e.bindFunctions("height", {
+                args: "image",
+                types: [Types.IMAGE],
+                returnType: Types.NUMBER,
+                handle: image => image.info.height
+            }, this.context);
+
         })(this.context.scope.environment);
 
         this.options = { ...options };
         if (!this.options.path.endsWith("/")) this.options.path += "/";
+        if (!this.options.angleUnit) this.options.angleUnit = 180 / Math.PI;
     }
 
     async execute(token) {
@@ -768,7 +842,9 @@ class Engine {
                 return result;
             }
             case "const": {
-                this.context.scope.state.addVariable(token.id, token.init, Types.STRING, true, this.context);
+                const result = await this.execute(token.init);
+                if (result == null) this.context.throw(`Assignment expression must return a value`);
+                this.context.scope.state.addVariable(token.id, result.value, result.type, true, this.context);
                 break;
             }
             case "var": {
@@ -800,6 +876,25 @@ class Engine {
                 }
                 const f = this.context.scope.environment.lookupFunction(token.id);
                 if (f === undefined) this.context.throw(`Function ${token.id} not found`);
+                if (f.handle) {
+                    //built-in function
+                    if (types.find((v, i) => v != f.types[i])) {
+                        const toResolve = [];
+                        for (const i in types) if (types[i] == Types.STRING) {
+                            types[i] = Types.IMAGE;
+                            toResolve.push(i);
+                            if (f.types == types) break;
+                        }
+                        if (types.find((v, i) => v != f.types[i])) this.context.throw(`Cannot call function ${token.id} for types ${types.map(getTypeName)}`);
+                        for (const i of toResolve) {
+                            args[i] = await this.loadImage(args[i]);
+                        }
+                    }
+                    return {
+                        type: f.returnType,
+                        value: f.handle(...args)
+                    };
+                }
 
                 return await this.executeCommands(ScopeTypes.CLOSURE, f.commands, token.id, async state => {
                     for (const i in f.args) {
@@ -849,7 +944,7 @@ class Engine {
                 this.context.scope.environment.bindFunctions(token.id, {
                     args: token.args,
                     commands: token.commands
-                });
+                }, this.context);
                 break;
             }
             case "expr": {
@@ -886,6 +981,25 @@ class Engine {
                         }
                         const f = this.context.scope.environment.lookupFunction(token.functionId);
                         if (f === undefined) this.context.throw(`Function ${token.functionId} not found`);
+                        if (f.handle) {
+                            //built-in function
+                            if (types.find((v, i) => v != f.types[i])) {
+                                const toResolve = [];
+                                for (const i in types) if (types[i] == Types.STRING) {
+                                    types[i] = Types.IMAGE;
+                                    toResolve.push(i);
+                                    if (f.types == types) break;
+                                }
+                                if (types.find((v, i) => v != f.types[i])) this.context.throw(`Cannot call function ${token.functionId} for types ${types.map(getTypeName)}`);
+                                for (const i of toResolve) {
+                                    args[i] = await this.loadImage(args[i]);
+                                }
+                            }
+                            return {
+                                type: f.returnType,
+                                value: f.handle(...args)
+                            };
+                        }
 
                         const result = await this.executeCommands(ScopeTypes.CLOSURE, f.commands, token.functionId, async state => {
                             for (const i in f.args) {
@@ -957,20 +1071,23 @@ class Engine {
         return result;
     }
 
-    async createBlankImage(width, height) {
+    async createBlankImage(width, height, color = "#00000000") {
+        if (width <= 0 || height <= 0) this.context.throw("Result image is empty");
         return await sharp({
             create: {
                 width,
                 height,
                 channels: 4,
-                background: { r: 0, g: 0, b: 0, alpha: 1 }
+                background: color
             }
         }).raw().toBuffer({ resolveWithObject: true });
     }
 
     async loadImage(pathname) {
         try {
-            return await sharp(this.options.path + pathname).raw().toBuffer({ resolveWithObject: true });
+            return await sharp(this.options.path + pathname)
+            .raw()
+            .toBuffer({ resolveWithObject: true });
         }
         catch (err) {
             this.context.throw(err.message);
@@ -982,7 +1099,7 @@ class Engine {
         return await sharp(image.data.buffer, { raw: { width, height, channels: image.info.channels } }).raw().toBuffer({ resolveWithObject: true });
     }
 
-    async applyElementWiseOperation(op, args) {
+    async applyElementWiseOperation(op, opName, args) {
 
         switch (args.length) {
             case 1: {
@@ -1001,10 +1118,10 @@ class Engine {
                 const left = args[0];
                 const right = args[1];
                 if (right.info.width != left.info.width || right.info.height != left.info.height) {
-                    this.context.throw(`Incompatible sizes for operation '${op}': ${right.info.width}x${right.info.height} and ${left.info.width}x${left.info.height}`);
+                    this.context.throw(`Incompatible sizes for operation '${opName}': ${right.info.width}x${right.info.height} and ${left.info.width}x${left.info.height}`);
                 }
                 if (right.info.channels != left.info.channels) {
-                    this.context.throw(`Incompatible formats for operation '${op}': ${right.info.channels} and ${left.info.channels}`);
+                    this.context.throw(`Incompatible formats for operation '${opName}': ${right.info.channels} and ${left.info.channels}`);
                 }
 
                 const { width, height, channels } = left.info;
@@ -1022,12 +1139,23 @@ class Engine {
         }
     }
 
-    async applyBlending(left, right) {
-        return await sharp(left.data.buffer, { raw: { width: left.info.width, height: left.info.height, channels: left.info.channels } })
+    async applyBlending(image0, image1) {
+        const w0 = image0.info.width;
+        const h0 = image0.info.height;
+        let w1 = image1.info.width;
+        let h1 = image1.info.height;
+        if (w0 < w1 || h0 < h1) {
+            image1 = await this.applyRange(image1, { x: 0, y: 0 }, { x: w0, y: h0 });
+            w1 = image1.info.width;
+            h1 = image1.info.height;
+        }
+        return await sharp(image0.data.buffer, { raw: { width: w0, height: h0, channels: image0.info.channels } })
             .composite([{
-                input: right.data.buffer,
-                raw: { width: right.info.width, height: right.info.height, channels: right.info.channels },
+                input: image1.data.buffer,
+                raw: { width: w1, height: h1, channels: image1.info.channels },
                 blend: "over",
+                top: Math.max(h1 - h0, 0),
+                left: Math.max(w1 - w0, 0)
             }])
             .raw()
             .toBuffer({ resolveWithObject: true });
@@ -1035,16 +1163,17 @@ class Engine {
 
     async applyRotation(image, angle) {
         return await sharp(image.data.buffer, { raw: { width: image.info.width, height: image.info.height, channels: image.info.channels } })
-            .rotate(angle * 180 / Math.PI, { color: "#00000000" })
+            .rotate(angle * this.options.angleUnit / Math.PI * 180, { color: "#00000000" })
             .raw()
             .toBuffer({ resolveWithObject: true });
     }
 
     async applyReflect(image, angle) {
+        angle *= this.options.angleUnit;
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
         return await sharp(image.data.buffer, { raw: { width: image.info.width, height: image.info.height, channels: image.info.channels } })
-            .rotate(-angle * 180 / Math.PI, { color: "#00000000" })
-            .flop()
-            .rotate(angle * 180 / Math.PI, { color: "#00000000" })
+            .affine([c, -s, s, c])
             .raw()
             .toBuffer({ resolveWithObject: true });
     }
@@ -1063,60 +1192,93 @@ class Engine {
             .toBuffer({ resolveWithObject: true });
     }
 
-    async applyConcat(image0, image1, xRelative, yRelative) {
+    async applyConcat(image0, image1, xRelative, yRelative, backgroundColor = "#00000000") {
+
+        if (xRelative == 0 && yRelative == 0) return await this.applyBlending(image0, image1);
 
         const w0 = image0.info.width;
         const h0 = image0.info.height;
         const w1 = image1.info.width;
         const h1 = image1.info.height;
 
-        if (xRelative == 0) {
-            if (yRelative == 0) return await this.applyBlending(image0, image1);
-            return await sharp(image1.data.buffer, { raw: { width: w1, height: h1, channels: image1.info.channels } })
-                .resize(Math.max(w0, w1), h0 + h1, {
-                    fit: "contain",
-                    position: yRelative < 0 ? "top" : "bottom"
-                })
-                .composite([{
-                    input: image0.data.buffer,
-                    raw: { width: w0, height: h0, channels: image0.info.channels },
-                    blend: "over",
-                    top: yRelative < 0 ? h1 : 0,
-                    left: 0,
-                }])
-                .raw()
-                .toBuffer({ resolveWithObject: true });
-        }
-        else if (yRelative == 0) {
-            return await sharp(image1.data.buffer, { raw: { width: w1, height: h1, channels: image1.info.channels } })
-                .resize(w0 + w1, Math.max(h0, h1), {
-                    fit: "contain",
-                    position: xRelative < 0 ? "left" : "right"
-                })
-                .composite([{
-                    input: image0.data.buffer,
-                    raw: { width: w0, height: h0, channels: image0.info.channels },
-                    blend: "over",
-                    left: xRelative < 0 ? w1 : 0,
-                    top: 0
-                }])
-                .raw()
-                .toBuffer({ resolveWithObject: true });
-        }
-        const i = xRelative + 1 + (yRelative + 1) / 2;
-        return await sharp(image1.data.buffer, { raw: { width: w1, height: h1, channels: image1.info.channels } })
-            .resize(w0 + w1, h0 + h1, {
-                fit: "contain",
-                position: ["northwest", "southwest", "northeast", "southeast"][i],
-                withoutEnlargement: true
+        return await sharp(image0.data.buffer, { raw: { width: w0, height: h0, channels: image0.info.channels } })
+            .extend({
+                left: xRelative == -1 ? w1 : 0,
+                top: yRelative == -1 ? h1 : 0,
+                right: xRelative == 1 ? w1 : 0,
+                bottom: yRelative == 1 ? h1 : 0,
+                background: backgroundColor
             })
             .composite([{
-                input: image0.data.buffer,
-                raw: { width: w0, height: h0, channels: image0.info.channels },
+                input: image1.data.buffer,
+                raw: { width: w1, height: h1, channels: image1.info.channels },
                 blend: "over",
-                left: xRelative < 0 ? w1 : 0,
-                top: yRelative < 0 ? h1 : 0
+                left: xRelative > 0 ? w0 : 0,
+                top: yRelative > 0 ? h0 : 0,
             }])
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+    }
+
+    async applyRange(image, rangeStart, rangeEnd, backgroundColor) {
+        const w = image.info.width;
+        const h = image.info.height;
+
+        if (rangeEnd.x <= rangeStart.x || rangeEnd.y <= rangeStart.y) this.context.throw("Range is empty");
+
+        const leftGrow = rangeStart.x < 0;
+        const rightGrow = rangeEnd.x > w;
+        const topGrow = rangeStart.y < 0;
+        const bottomGrow = rangeEnd.y > h;
+
+        const leftShrink = rangeEnd.x < w;
+        const rightShrink = rangeStart.x > 0;
+        const topShrink = rangeEnd.y < h;
+        const bottomShrink = rangeStart.y > 0;
+
+        const grow = leftGrow || rightGrow || topGrow || bottomGrow;
+        const shrink = leftShrink || rightShrink || topShrink || bottomShrink;
+
+        if (!grow && !shrink) return image;
+
+        const s = sharp(image.data.buffer, { raw: { width: w, height: h, channels: image.info.channels } });
+        if (shrink) {
+            s.extract({
+                left: Math.max(rangeStart.x, 0),
+                top: Math.max(rangeStart.y, 0),
+                width: Math.min(rangeEnd.x, w) - Math.max(rangeStart.x, 0),
+                height: Math.min(rangeEnd.y, h) - Math.max(rangeStart.y, 0)
+            });
+        }
+        if (grow) {
+            s.extend({
+                left: Math.max(-rangeStart.x, 0),
+                top: Math.max(-rangeStart.y, 0),
+                right: Math.max(rangeEnd.x - w, 0),
+                bottom: Math.max(rangeEnd.y - h, 0),
+                background: backgroundColor
+            });
+        }
+
+        return await s
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+    }
+
+    async applyResize(image, width, height, kernel) {
+        if (kernel && ["nearest", "linear", "cubic", "mitchell", "lanczos2", "lanczos3", "mks2013", "mks2021"].indexOf(kernel) == -1) {
+            this.context.throw(`Unknown resize kernel "${kernel}"`);
+        }
+        if (width <= 0 || height <= 0) {
+            this.context.throw("Cannot resize image to a zero-sized image");
+        }
+        return await sharp(image.data.buffer, { raw: { width: image.info.width, height: image.info.height, channels: image.info.channels } })
+            .resize({
+                fit: "fill",
+                width,
+                height,
+                kernel: kernel
+            })
             .raw()
             .toBuffer({ resolveWithObject: true });
     }
@@ -1163,7 +1325,8 @@ async function runFile(properties, syntaxFilename, codeFilename) {
 
         const engine = new Engine({
             path: properties.imagesPath ?? "examples/simple/images",
-            debug: properties.debug
+            debug: properties.debug,
+            angleUnit: units[properties.angleUnit] ?? undefined
         });
 
         const result = await engine.execute(ast);
@@ -1192,7 +1355,8 @@ async function repl(properties, syntaxFilename) {
 
     const engine = new Engine({
         path: properties.imagesPath ?? "examples/simple/images",
-        debug: properties.debug
+        debug: properties.debug,
+        angleUnit: units[properties.angleUnit] ?? undefined
     });
 
     var rl = await import('readline-sync');
@@ -1200,6 +1364,10 @@ async function repl(properties, syntaxFilename) {
         var line = rl.question("> ");
         if (line == "exit" || line == "stop") {
             return;
+        }
+        if (line == "clear") {
+            console.log("\x1B[2J\x1B[H");
+            continue;
         }
         let parseTree = parser.getAST(line);
         if (!parseTree && !line.endsWith(";")) parseTree = parser.getAST(line + ";");
@@ -1231,7 +1399,11 @@ async function repl(properties, syntaxFilename) {
 
 }
 
-
+const units = {
+    degree: Math.PI / 180,
+    radians: 1,
+    turns: 2 * Math.PI
+};
 
 const properties = {};
 
@@ -1246,52 +1418,64 @@ for (const arg of process.argv.slice(2)) {
         properties[key] = value;
     }
 }
-if (properties.debug) {
-    console.log("Properties", properties);
-}
 
-properties.mode = properties.mode?.toLowerCase() ?? "run";
+async function main() {
 
-if (properties.help !== undefined) {
-    console.log("Usage: ");
-    console.log("Properties:");
-    for (const e of [
-        { name: "test", desc: "Specify test files as input file", usage: "<name_of_test>" },
-        { name: "input", desc: "Specify the input file path", usage: "<path_of_file>" },
-        { name: "syntax", desc: "Specify the syntax file path", usage: "<path_of_file>" },
-        { name: "mode", desc: "Specify the run mode (default: run), when in \"run\" execute the given input, when in \"repl\" starts a REPL environment, when in \"ast\" parses and prints the input's ast tree and return", usage: "{ run | repl | ast }" },
-        { name: "imagesPath", desc: "Specify the root directory where images are resolved to", usage: "<path_of_directory>" },
-        { name: "debug", desc: "Run in debug mode" },
-    ]) {
-        console.log(`    ${e.name}${e.usage ? `=${e.usage}` : ""}`);
-        console.log(`        ${e.desc}`);
+    if (properties.debug) {
+        console.log("Properties", properties);
     }
-}
-else if (properties.mode == "repl") {
-    var syntaxFilename = "syntax.ebnf";
-    syntaxFilename = "src/simpleSyntax.ebnf";
 
-    if (properties.syntax) syntaxFilename = properties.syntax;
+    properties.mode = properties.mode?.toLowerCase() ?? "run";
 
-    await repl(properties, syntaxFilename);
-}
-else {
-    var syntaxFilename = "syntax.ebnf";
-    var codeFilename = "test.tpl";
-    syntaxFilename = "src/simpleSyntax.ebnf";
-    codeFilename = "examples/simple/test1.tpl";
-
-    if (properties.test) codeFilename = "examples/simple/" + properties.test + ".tpl";
-    else if (properties.input) codeFilename = properties.input;
-    if (properties.syntax) syntaxFilename = properties.syntax;
-
-    if (properties.mode == "ast") {
-        await printAst(properties, syntaxFilename, codeFilename);
+    if (properties.help !== undefined) {
+        console.log("Usage: ");
+        console.log("Properties:");
+        for (const e of [
+            { name: "test", desc: "Specify test files as input file", usage: "<test_id>" },
+            { name: "example", desc: "Specify example files as input file", usage: "<example_id>" },
+            { name: "input", desc: "Specify the input file path", usage: "<path_of_file>" },
+            { name: "syntax", desc: "Specify the syntax file path", usage: "<path_of_file>" },
+            { name: "mode", desc: "Specify the run mode (default: run), when in \"run\" execute the given input, when in \"repl\" starts a REPL environment, when in \"ast\" parses and prints the input's ast tree and return", usage: "{ run | repl | ast }" },
+            { name: "imagesPath", desc: "Specify the root directory where images are resolved to", usage: "<path_of_directory>" },
+            { name: "angleUnit", desc: "Specify the value of an angle of 1", usage: "{ degree | radians | turns }" },
+            { name: "debug", desc: "Run in debug mode" },
+        ]) {
+            console.log(`    ${e.name}${e.usage ? `=${e.usage}` : ""}`);
+            console.log(`        ${e.desc}`);
+        }
     }
-    else if (properties.mode == "run") {
-        await runFile(properties, syntaxFilename, codeFilename);
+    else if (properties.mode == "repl") {
+        var syntaxFilename = "syntax.ebnf";
+        syntaxFilename = "src/simpleSyntax.ebnf";
+
+        if (properties.syntax) syntaxFilename = properties.syntax;
+
+        await repl(properties, syntaxFilename);
     }
     else {
-        console.log("Mode not recognized: " + properties.mode);
+        var syntaxFilename = "syntax.ebnf";
+        var codeFilename = "test.tpl";
+        syntaxFilename = "src/simpleSyntax.ebnf";
+        codeFilename = "examples/simple/test1.tpl";
+
+        if ((properties.test != null) + (properties.example != null) + (properties.input != null) > 1) {
+            console.log("Only one input must be specified");
+            return;
+        }
+        if (properties.test) codeFilename = "examples/simple/test" + properties.test + ".tpl";
+        else if (properties.input) codeFilename = properties.input;
+        else if (properties.example) codeFilename = "examples/simple/example" + properties.example + ".tpl";
+        if (properties.syntax) syntaxFilename = properties.syntax;
+
+        if (properties.mode == "ast") {
+            await printAst(properties, syntaxFilename, codeFilename);
+        }
+        else if (properties.mode == "run") {
+            await runFile(properties, syntaxFilename, codeFilename);
+        }
+        else {
+            console.log("Mode not recognized: " + properties.mode);
+        }
     }
 }
+await main();
