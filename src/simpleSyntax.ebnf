@@ -41,17 +41,15 @@ BinBlendingExpr   ::= UnaryExpr WS* BlendOp WS* Expr | UnaryExpr
 UnaryExpr         ::= (UnaryOp WS*)? RangeExpr
 RangeExpr         ::= ResizeExpr ("[" WS* Expr "," WS* Expr "->" WS* Expr "," WS* Expr ("," WS* Expr)? "]" WS*)?
 ResizeExpr        ::= CallExpr ("{" WS* Expr "," WS* Expr ("," WS* Expr)? "}" WS*)?
-PostfixUnaryExpr  ::= CallExpr (WS* PostfixOp)?
 CallExpr          ::= Identifier CallArgs WS* | BracketExpr
 BracketExpr       ::= "(" WS* Expr ")" WS* | ClosureExpr
 ClosureExpr       ::= Closure WS* | Value
 
 AssignOp ::= BinaryOp? "="
-BinaryOp  ::= RotateTypeOp | ConcatOp | CompareOp | AndOp | OrOp | AddSubOp
+BinaryOp  ::= RotateTypeOp | ConcatOp | AndOp | OrOp | AddSubOp
     | MulDivRemOp | BlendOp
 
 UnaryOp   ::= "|" | "#" | "-" | "!"
-PostfixOp ::= "()"
 
 RotateTypeOp ::= "@"   | "!@"
 ConcatOp     ::= "|<^" | "|<v" | "|>v" | "|>^" | "|<"  | "|>"  | "|v"  | "|^"

@@ -768,7 +768,7 @@ class Engine {
 
             e.bindOperation("[->]", [Types.IMAGE, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.NUMBER], Types.IMAGE, async (v, x0, y0, x1, y1) => await this.applyRange(v, { x: x0, y: y0 }, { x: x1, y: y1 }, "#00000000"));
             e.bindOperation("[->]", [Types.IMAGE, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.STRING], Types.IMAGE, async (v, x0, y0, x1, y1, c) => await this.applyRange(v, { x: x0, y: y0 }, { x: x1, y: y1 }, c));
-            e.bindOperation("[->]", [Types.EMPTY, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.NUMBER], Types.IMAGE, async (_, x0, y0, x1, y1) => await this.createBlankImage(x1 - x0, y1 - y0, "#00000000"));
+            e.bindOperation("[->]", [Types.EMPTY, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.NUMBER], Types.IMAGE, async (_, x0, y0, x1, y1) => await this.createBlankImage(x1 - x0, y1 - y0));
             e.bindOperation("[->]", [Types.EMPTY, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.NUMBER, Types.STRING], Types.IMAGE, async (_, x0, y0, x1, y1, c) => await this.createBlankImage(x1 - x0, y1 - y0, c));
             e.bindOperation("{}", [Types.IMAGE, Types.NUMBER, Types.NUMBER], Types.IMAGE, async (v, w, h) => await this.applyResize(v, w, h, "nearest"));
             e.bindOperation("{}", [Types.IMAGE, Types.NUMBER, Types.NUMBER, Types.STRING], Types.IMAGE, async (v, w, h, s) => await this.applyResize(v, w, h, s));
@@ -776,13 +776,11 @@ class Engine {
             e.bindOperation("{}", [Types.EMPTY, Types.NUMBER, Types.NUMBER, Types.STRING], Types.IMAGE, async (_, w, h, s) => await this.createBlankImage(w, h, s));
 
             e.bindFunctions("width", {
-                args: "image",
                 types: [Types.IMAGE],
                 returnType: Types.NUMBER,
                 handle: image => image.info.width
             }, this.context);
             e.bindFunctions("height", {
-                args: "image",
                 types: [Types.IMAGE],
                 returnType: Types.NUMBER,
                 handle: image => image.info.height
@@ -1277,7 +1275,7 @@ class Engine {
                 fit: "fill",
                 width,
                 height,
-                kernel: kernel
+                kernel
             })
             .raw()
             .toBuffer({ resolveWithObject: true });
