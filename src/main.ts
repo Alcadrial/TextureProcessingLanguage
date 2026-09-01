@@ -952,7 +952,13 @@ class Engine {
                 } as Range;
 
                 if (dstVariable.type == Type.EMPTY) {
-
+                    result.value = await this.applyResize(result.value, range.to.x -= range.from.x, range.to.y -= range.from.y, "cubic");
+                    if (range.from.x < 0) range.from.x = 0;
+                    else range.from.x = -range.from.x;
+                    if (range.from.y < 0) range.from.y = 0;
+                    else range.from.y = -range.from.y;
+                    result.value = await this.applyRange(result.value, range, values[4]);
+                    state.setVariable(assignmentToken.dstId, result.value, Type.IMAGE, this.context);
                 }
                 else {
                     result.value = await this.copyImageToImageRange(result.value, range, (dstVariable as { value: Image }).value, values[4]);
@@ -1334,8 +1340,8 @@ class Engine {
             .extend({
                 left: xRelative == -1 ? w1 : 0,
                 top: yRelative == -1 ? h1 : 0,
-                right: xRelative == 1 ? w1 : 0,
-                bottom: yRelative == 1 ? h1 : 0,
+                right: xRelative == 1 ? w1 : xRelative == 0 ? Math.max(w1 - w0, 0) : 0,
+                bottom: yRelative == 1 ? h1 : yRelative == 0 ? Math.max(h1 - h0, 0) : 0,
                 background: backgroundColor
             })
             .composite([{
