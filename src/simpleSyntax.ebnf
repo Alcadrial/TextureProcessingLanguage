@@ -12,14 +12,16 @@ ReturnCommand ::= "return" WS+ Expr ";"
 Decl          ::= DeclConst | DeclVar
 DeclConst     ::= "const" WS+ Identifier "=" WS* Expr WS* ";"
 DeclVar       ::= "var" WS+ Identifier ("=" WS* Expr)? ";"
-Assignment    ::= Identifier AssignOp WS* Expr ";"
+Assignment    ::= Identifier RangedAssign? AssignOp WS* Expr ";"
+RangedAssign  ::= "[" WS* Expr "," WS* Expr "->" WS* Expr "," WS* Expr ("," WS* Expr)? "]" WS*
 
 Call          ::= Identifier CallArgs WS* ";"
 CallArgs      ::= "(" WS* ((Expr "," WS*)* Expr)? ")"
 
-WhileLike     ::= "while" WS* "(" WS* Expr ")" WS* LoopBody
-LoopBody      ::= "{" (WS* LoopCommand)* WS* "}" | LoopCommand
-LoopCommand   ::= Command | "break" WS* ";" | "continue" WS* ";"
+WhileLike       ::= "while" WS* "(" WS* Expr ")" WS* LoopBody
+LoopBody        ::= "{" (WS* LoopCommand)* WS* "}" | LoopCommand
+LoopCommand     ::= Command | LoopFlowCommand WS* ";"
+LoopFlowCommand ::= "break" | "continue"
 
 IfLike ::= "if" WS* "(" WS* Expr ")" WS* Exec (WS* ElseLike)?
 ElseLike ::= "else" WS* Exec
@@ -61,16 +63,15 @@ MulDivRemOp  ::= "*"   | "/"   | "%"
 BlendOp      ::= "**"
 
 Identifier ::= !KEYWORD [a-zA-Z] [a-zA-Z0-9]* WS*
-Value ::= Identifier | Empty WS* | String WS* | Boolean WS* | Float WS* | Int WS*
+Value ::= Identifier | String WS* | Boolean WS* | Float WS* | Int WS*
 
-Empty ::= "empty"
 String ::= '"' [^"]* '"' | "'" [^']* "'"
 Boolean ::= "false" | "true"
 Float ::= [+-]? [0-9]* "."? [0-9]+ ([eE] [+-]? [0-9]+)?
 Int ::= [+-]? UINT
 UINT ::= [0-9]+
 
-KEYWORD ::= "false" | "true" | "const" | "var" | "return" | "if" | "else" | "while" | "break" | "continue" | "signal" | "print" | "empty"
+KEYWORD ::= "false" | "true" | "const" | "var" | "return" | "if" | "else" | "while" | "break" | "continue" | "signal" | "print"
 
 WS ::= Comment | MultiLineComment | [#x20#x09#x0A#x0D]+
 

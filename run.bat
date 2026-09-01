@@ -1,3 +1,3 @@
 @echo off
 cls
-node src/main.js %*
+npm run start %*
