@@ -1145,11 +1145,11 @@ class Engine {
         }
     }
 
-    async executeCommands(scopeType: ScopeType, commands: Command[], name: string, initState = async (_: State) => { }) {
+    async executeCommands(scopeType: ScopeType, commands: Command[], name: string, initState = async (_: State) => { }): Promise<Variable | undefined> {
         const newScope = this.context.newScope(scopeType, name);
         await initState(newScope.state);
         this.context.pushScope(newScope);
-        let result;
+        let result: Variable | undefined;
         try {
             for (const command of commands) {
                 result = await this.execute(command);
@@ -1375,6 +1375,9 @@ class Engine {
         const shrink = leftShrink || rightShrink || topShrink || bottomShrink;
 
         if (!grow && !shrink) return image;
+        if (range.from.x >= w || range.from.y >= h || range.to.x <= 0 || range.to.y <= 0) {
+            return this.createBlankImage(range.to.x - range.from.x, range.to.y - range.from.y, backgroundColor);
+        }
 
         const s = sharp(image.data.buffer, { raw: { width: w, height: h, channels: image.info.channels } });
         if (shrink) {
