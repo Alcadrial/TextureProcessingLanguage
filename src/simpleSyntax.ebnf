@@ -49,7 +49,7 @@ ClosureExpr       ::= Closure WS* | Value
 
 AssignOp ::= BinaryOp? "="
 BinaryOp  ::= RotateTypeOp | ConcatOp | AndOp | OrOp | AddSubOp
-    | MulDivRemOp | BlendOp
+    | BlendOp | MulDivRemOp
 
 UnaryOp   ::= "|" | "#" | "-" | "!"
 
