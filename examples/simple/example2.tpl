@@ -22,8 +22,8 @@ while (i < 11) {
     wall[i*16,0->(i+1)*16,16] = tileSet[2*16,3*16->3*16,4*16];
     while (j < 11) {
         //generate random indexes
-        const ri = 1 + (random() % 13);
-        const rj = 1 + (random() % 16);
+        const ri = 1 + floor(random() * 13);
+        const rj = 1 + floor(random() * 16);
         wall[i*16,j*16->(i+1)*16,(j+1)*16] = tileSet[ri*16,rj*16->(ri+1)*16,(rj+1)*16];
         j += 1;
     }

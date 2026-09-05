@@ -102,15 +102,15 @@ Makes the edge of the image sharper
 ### Variables
 
 - pi: The constant value of pi (3.14...)
-- empty:
-
-  An image with zero size that cannot be created or modified, is used to create fixed color images of any size
+- empty: An image with zero size that cannot be created or modified, is used to create fixed color images of any size
 
 ### Functions
 
 - width(image): Returns the width of the given image
 - height(image): Returns the height of the given image
 - random(): Returns a pseudorandomly generated numeber between 0 and 1 inclusive
+- floor(number): Returns the highest integer lesser than the given number
+- ceil(number): Returns the lowest integer greater than the given number
 
 ## Examples
 

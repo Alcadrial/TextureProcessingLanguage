@@ -161,16 +161,14 @@ class AstBuilder {
         };
     }
 
-    public buildAst(token?: IToken, allowFullExpr = false): Token | Command[] | string | undefined {
+    public buildAst(token: IToken | undefined, allowFullExpr = false): Token | Command[] | string | undefined {
+
         if (!token) return undefined;
 
         switch (token.type) {
             case "Program": {
                 if (token.children[0]?.type == "Expr") {
-                    if (!allowFullExpr) {
-                        console.log("Expr not allowed");
-                        return undefined;
-                    }
+                    if (!allowFullExpr) throw Error("Expr not allowed");
                     return this.buildAstExpr(token.children[0]);
                 }
                 return {
@@ -228,7 +226,7 @@ class AstBuilder {
                                     type: "const",
                                     debugData: this.getDebugData(declVariantToken),
                                     id: this.buildAst(declVariantToken.children[0]),
-                                    init: this.buildAstExpr(declVariantToken.children[1])/* as Expr */
+                                    init: this.buildAstExpr(declVariantToken.children[1])
                                 } as DeclConst;
                             }
                             case "DeclVar": {
@@ -236,7 +234,7 @@ class AstBuilder {
                                     type: "var",
                                     debugData: this.getDebugData(declVariantToken),
                                     id: this.buildAst(declVariantToken.children[0]),
-                                    init: declVariantToken.children[1] ? this.buildAstExpr(declVariantToken.children[1]) : null/* as Expr */
+                                    init: declVariantToken.children[1] ? this.buildAstExpr(declVariantToken.children[1]) : undefined
                                 } as DeclVar;
                             }
                             default: {
@@ -281,7 +279,7 @@ class AstBuilder {
                         return {
                             type: "call",
                             debugData: this.getDebugData(commandToken),
-                            id: this.buildAst(commandToken.children[0])/* as Identifier */,
+                            id: this.buildAst(commandToken.children[0]),
                             args: commandToken.children[1].children.map(t => this.buildAstExpr(t))
                         } as Call;
                     case "WhileLike":
@@ -331,137 +329,54 @@ class AstBuilder {
             case "String":
                 return token.text.trim().substring(1, token.text.length - 1);
             default:
-                console.log("Unknown token " + token.type);
-                return undefined;
+                throw Error("Unknown token " + token.type);
         }
     }
-    //Tries to parse a "Program" token
-    //Tries to parse an "Expr" token or any component of it, pruning meaningless tokens
-    buildAstExpr(token: IToken): Expr | undefined {
+
+    private expr(token: IToken, type: string, params: any) {
+        return {
+            type: "expr",
+            debugData: this.getDebugData(token),
+            exprType: type,
+            ...params
+        }
+    }
+
+    buildAstExpr(token: IToken): Expr {
         if (token.type == "Expr") return this.buildAstExpr(token.children[0]);
 
         //skip all tokens without an operator
         while (token.type != "ClosureExpr" && token.children.length == 1) token = token.children[0];
 
-        if (token.type.substring(0, 3) == "Bin") {
-            let expr = token;
-            let e0 = expr.children[0];
-            let e2 = expr.children[2];
-            return {
-                type: "expr",
-                debugData: this.getDebugData(expr),
-                exprType: "operation",
-                op: expr.children[1].text,
-                exprs: [this.buildAstExpr(e0), this.buildAstExpr(e2)]
-            } as OperationExpr;
-        }
+        if (token.type.substring(0, 3) == "Bin")
+            return this.expr(token, "operation", { op: token.children[1].text, exprs: [this.buildAstExpr(token.children[0]), this.buildAstExpr(token.children[2])] }) as OperationExpr;
         switch (token.type) {
-            case "UnaryExpr": {
-                const e = token.children[0];
-                if (e.type == "RangeExpr") {
-                    return this.buildAstExpr(e);
-                }
-                return {
-                    type: "expr",
-                    debugData: this.getDebugData(token),
-                    exprType: "operation",
-                    op: e.text.trim(),
-                    exprs: [this.buildAstExpr(token.children[1])]
-                } as OperationExpr;
-            }
+            case "UnaryExpr":
+                return this.expr(token, "operation", { op: token.children[0].text.trim(), exprs: [this.buildAstExpr(token.children[1])] }) as OperationExpr;
             case "RangeExpr":
-                if (token.children.length == 1) {
-                    return this.buildAstExpr(token.children[0]);
-                }
-                return {
-                    type: "expr",
-                    debugData: this.getDebugData(token),
-                    exprType: "operation",
-                    op: "[->]",
-                    exprs: token.children.map(e0 => this.buildAstExpr(e0))
-                } as OperationExpr;
+                return this.expr(token, "operation", { op: "[->]", exprs: token.children.map(e0 => this.buildAstExpr(e0)) }) as OperationExpr;
             case "ResizeExpr":
-                if (token.children.length == 1) {
-                    return this.buildAstExpr(token.children[0]);
-                }
-                return {
-                    type: "expr",
-                    debugData: this.getDebugData(token),
-                    exprType: "operation",
-                    op: "{}",
-                    exprs: token.children.map(e0 => this.buildAstExpr(e0))
-                } as OperationExpr;
-            /*
-            case "PostfixUnaryExpr": {
-
-                const e = token.children[1];
-                if (!e) {
-                    return this.buildAstExpr(token.children[0]);
-                }
-                return {
-                    debugData: this.getDebugData(token),
-                    op: e.text.trim(),
-                    exprs: [baseExpr, this.buildAstExpr(token.children[1])]
-                } as OperationExpr;
-            }*/
-            case "CallExpr": {
-                const e = token.children[0];
-                if (e.type == "BracketExpr") {
-                    return this.buildAstExpr(e);
-                }
-                return {
-                    type: "expr",
-                    debugData: this.getDebugData(token),
-                    exprType: "call",
-                    functionId: this.buildAst(token.children[0]),
-                    args: token.children[1].children.map(e0 => this.buildAstExpr(e0))
-                } as CallExpr;
-            }
+                return this.expr(token, "operation", { op: "{}", exprs: token.children.map(e0 => this.buildAstExpr(e0)) }) as OperationExpr;
+            case "CallExpr":
+                return this.expr(token, "call", { functionId: this.buildAst(token.children[0]), args: token.children[1].children.map(e0 => this.buildAstExpr(e0)) }) as CallExpr;
             case "BracketExpr":
                 return this.buildAstExpr(token.children[0]);
             case "ClosureExpr": {
                 const e = token.children[0];
-                if (e.type == "Value") {
-                    return this.buildAstExpr(e.children[0])
-                }
-                return {
-                    type: "expr",
-                    debugData: this.getDebugData(token),
-                    exprType: "closure",
-                    commands: e.children.map(t => this.buildAst(t)).filter(c => c)
-                } as ClosureExpr;
+                if (e.type == "Value") return this.buildAstExpr(e.children[0]);
+                return this.expr(token, "closure", { commands: e.children.map(t => this.buildAst(t)).filter(c => c) }) as ClosureExpr;
             }
             case "Identifier":
-                return {
-                    type: "expr",
-                    debugData: this.getDebugData(token),
-                    exprType: "id",
-                    id: token.text.trim()
-                } as IdExpr;
+                return this.expr(token, "id", { id: token.text.trim() }) as IdExpr;
             case "String":
-                return {
-                    type: "expr",
-                    debugData: this.getDebugData(token),
-                    exprType: "string",
-                    value: token.text.trim().substring(1, token.text.length - 1)
-                } as ValueExpr;
+                return this.expr(token, "string", { value: token.text.trim().substring(1, token.text.length - 1) }) as ValueExpr;
             case "Boolean":
-                return {
-                    type: "expr",
-                    debugData: this.getDebugData(token),
-                    exprType: "boolean",
-                    value: token.text.trim()
-                } as ValueExpr;
+                return this.expr(token, "boolean", { value: token.text.trim() }) as ValueExpr;
             case "Float":
             case "Int":
-                return {
-                    type: "expr",
-                    debugData: this.getDebugData(token),
-                    exprType: "number",
-                    value: token.text.trim()
-                } as ValueExpr;
+                return this.expr(token, "number", { value: token.text.trim() }) as ValueExpr;
             default:
-                console.log("Unknown expr token " + token.type);
+                throw Error("Unknown expr token " + token.type);
         }
     }
 }
@@ -563,9 +478,6 @@ class Context {
     }
 
     throw(error: string): any {
-        const debugData = this.scope.token?.debugData;
-        const lineNumber = debugData?.location?.lineNumber ?? -1;
-
         throw `Error: ${error}\n${this.collectStackTrace()}`;
     }
 
@@ -843,6 +755,18 @@ class Engine {
                 returnType: Type.NUMBER,
                 handle: () => randomInt(2 ** 32) / (2 ** 32)
             }, this.context);
+            e.bindFunctions("floor", {
+                builtin: true,
+                types: [Type.NUMBER],
+                returnType: Type.NUMBER,
+                handle: ([n]) => Math.floor(n)
+            }, this.context);
+            e.bindFunctions("ceil", {
+                builtin: true,
+                types: [Type.NUMBER],
+                returnType: Type.NUMBER,
+                handle: ([n]) => Math.ceil(n)
+            }, this.context);
 
         })(this.context.scope.environment);
 
@@ -853,7 +777,6 @@ class Engine {
     }
 
     async execute(token: Token): Promise<Variable | undefined> {
-        if (!token) this.context.throw("Cannot execute an undefined token");
         if (this.options.debug) console.log("Command: " + token.type);
 
         this.context.scope.token = token;
@@ -1040,21 +963,15 @@ class Engine {
             }
             case "if": {
                 const ifToken = token as IfLike;
-                let result = await this.execute(ifToken.condition);
+                const result = await this.execute(ifToken.condition);
                 if (!result) return this.context.throw("The condition of a if-statement must return a value");
-                if (result.type != Type.BOOLEAN) this.context.throw(`Value of type ${getTypeName(result.type)} cannot be casted to boolean`);
-                if (result.value) {
-                    result = await this.executeCommands(ScopeType.PLAIN, ifToken.commands, "then");
-                }
-                else if (ifToken.elseCommands) {
-                    result = await this.executeCommands(ScopeType.PLAIN, ifToken.elseCommands, "else");
-                }
+                if (result.type != Type.BOOLEAN) this.context.throw(`The condition of a if-statement must be boolean, not ${getTypeName(result.type)}`);
+                if (result.value) return await this.executeCommands(ScopeType.PLAIN, ifToken.commands, "then");
+                if (ifToken.elseCommands) return await this.executeCommands(ScopeType.PLAIN, ifToken.elseCommands, "else");
                 return result;
             }
-            case "closure": {
-                const closureToken = token as Closure;
-                return await this.executeCommands(ScopeType.CLOSURE, closureToken.commands, "closure");
-            }
+            case "closure":
+                return await this.executeCommands(ScopeType.CLOSURE, (token as Closure).commands, "closure");
             case "function": {
                 const functionToken = token as Function;
                 this.context.scope.environment.bindFunctions(functionToken.id, {
@@ -1067,20 +984,11 @@ class Engine {
             case "expr":
                 switch ((token as Expr).exprType) {
                     case "boolean":
-                        return {
-                            value: (token as ValueExpr).value ? true : false,
-                            type: Type.BOOLEAN
-                        };
+                        return { value: (token as ValueExpr).value ? true : false, type: Type.BOOLEAN };
                     case "string":
-                        return {
-                            value: (token as ValueExpr).value,
-                            type: Type.STRING
-                        };
+                        return { value: (token as ValueExpr).value, type: Type.STRING };
                     case "number":
-                        return {
-                            value: Number((token as ValueExpr).value),
-                            type: Type.NUMBER
-                        };
+                        return { value: Number((token as ValueExpr).value), type: Type.NUMBER };
                     case "id": {
                         const variable = this.context.scope.state.getVariable((token as IdExpr).id, this.context);
                         if (variable.type === null) return this.context.throw(`Variable ${variable.name} has not been initialized yet`);
@@ -1118,10 +1026,8 @@ class Engine {
                         if (result === null) this.context.throw(`Missing return statement after executing function ${callToken.functionId}`);
                         return result;
                     }
-                    case "closure": {
-                        const closureToken = token as ClosureExpr;
-                        return await this.executeCommands(ScopeType.CLOSURE, closureToken.commands, "closure");
-                    }
+                    case "closure":
+                        return await this.executeCommands(ScopeType.CLOSURE, (token as ClosureExpr).commands, "closure");
                     case "operation": {
                         const operationToken = token as OperationExpr;
                         const [args, types] = await this.executeExprs(operationToken.exprs);
@@ -1515,10 +1421,10 @@ async function repl(properties: Properties, syntaxFileName: string) {
     var rl = await import("readline-sync");
     while (true) {
         var line = rl.question("> ");
-        if (line == "exit" || line == "stop") {
+        if (line.toLowerCase() == "exit" || line.toLowerCase() == "stop") {
             return;
         }
-        if (line == "clear") {
+        if (line.toLowerCase() == "clear") {
             console.log("\x1B[2J\x1B[H");
             continue;
         }
