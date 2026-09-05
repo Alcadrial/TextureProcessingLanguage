@@ -32,14 +32,14 @@ FunctionArgs ::= "(" WS* ((Identifier "," WS*)* Identifier)? ")"
 Expr ::= BinRotateExpr
 /* add Formatting ~ ~? */
 /* add ApplyTransform <~> */
-BinRotateExpr     ::= UnaryExpr WS* RotateTypeOp WS* Expr | BinConcatExpr
-BinConcatExpr     ::= UnaryExpr WS* ConcatOp WS* Expr | BinCompareExpr
-BinCompareExpr    ::= UnaryExpr WS* CompareOp WS* Expr | BinAndExpr
-BinAndExpr        ::= UnaryExpr WS* AndOp WS* Expr | BinOrExpr
-BinOrExpr         ::= UnaryExpr WS* OrOp WS* Expr | BinAddSubExpr
-BinAddSubExpr     ::= UnaryExpr WS* AddSubOp WS* Expr | BinMulDivRemExpr
-BinMulDivRemExpr  ::= UnaryExpr WS* MulDivRemOp WS* Expr | BinBlendingExpr
-BinBlendingExpr   ::= UnaryExpr WS* BlendOp WS* Expr | UnaryExpr
+BinRotateExpr     ::= BinConcatExpr WS* (RotateTypeOp WS* Expr)?
+BinConcatExpr     ::= BinCompareExpr WS* (ConcatOp WS* Expr)?
+BinCompareExpr    ::= BinAndExpr WS* (CompareOp WS* Expr)?
+BinAndExpr        ::= BinOrExpr WS* (AndOp WS* Expr)?
+BinOrExpr         ::= BinAddSubExpr WS* (OrOp WS* Expr)?
+BinAddSubExpr     ::= BinMulDivRemExpr WS* (AddSubOp WS* Expr)?
+BinMulDivRemExpr  ::= BinBlendingExpr WS* (MulDivRemOp WS* Expr)?
+BinBlendingExpr   ::= UnaryExpr WS* (BlendOp WS* Expr)?
 UnaryExpr         ::= (UnaryOp WS*)? RangeExpr
 RangeExpr         ::= ResizeExpr ("[" WS* Expr "," WS* Expr "->" WS* Expr "," WS* Expr ("," WS* Expr)? "]" WS*)?
 ResizeExpr        ::= CallExpr ("{" WS* Expr "," WS* Expr ("," WS* Expr)? "}" WS*)?

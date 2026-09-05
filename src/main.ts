@@ -340,19 +340,13 @@ class AstBuilder {
     buildAstExpr(token: IToken): Expr | undefined {
         if (token.type == "Expr") return this.buildAstExpr(token.children[0]);
 
+        //skip all tokens without an operator
+        while (token.type != "ClosureExpr" && token.children.length == 1) token = token.children[0];
+
         if (token.type.substring(0, 3) == "Bin") {
-            //Search for a binary expression
             let expr = token;
-            let kind = expr.type;
             let e0 = expr.children[0];
             let e2 = expr.children[2];
-            while (!e2) {
-                expr = e0;
-                kind = expr.type;
-                if (kind.substring(0, 3) != "Bin") return this.buildAstExpr(expr);
-                e0 = expr.children[0];
-                e2 = expr.children[2];
-            }
             return {
                 type: "expr",
                 debugData: this.getDebugData(expr),
@@ -361,7 +355,6 @@ class AstBuilder {
                 exprs: [this.buildAstExpr(e0), this.buildAstExpr(e2)]
             } as OperationExpr;
         }
-        //Search for an unary expression
         switch (token.type) {
             case "UnaryExpr": {
                 const e = token.children[0];
@@ -667,6 +660,16 @@ class State {
         [key: string]: {
             name: string;
             type: Type;
+        } | {
+            name: string;
+            value: any;
+            type: Type;
+            isConst: boolean;
+        } | {
+            name: string;
+            value: null;
+            type: null;
+            isConst: false;
         } | undefined;
     };
 
@@ -683,6 +686,12 @@ class State {
             empty: {
                 name: "empty",
                 type: Type.EMPTY
+            },
+            pi: {
+                name: "pi",
+                type: Type.NUMBER,
+                value: Math.PI,
+                isConst: true
             }
         };
     }
@@ -832,7 +841,7 @@ class Engine {
                 builtin: true,
                 types: [],
                 returnType: Type.NUMBER,
-                handle: () => randomInt(2 ** 32)
+                handle: () => randomInt(2 ** 32) / (2 ** 32)
             }, this.context);
 
         })(this.context.scope.environment);
@@ -1298,7 +1307,7 @@ class Engine {
 
     async applyRotation(image: Image, angle: number, color: ColorLike = "#00000000"): Promise<Image> {
         return await sharp(image.data.buffer, { raw: { width: image.info.width, height: image.info.height, channels: image.info.channels } })
-            .rotate(angle * this.options.angleUnit / Math.PI * 180, { background: color })
+            .rotate(angle * this.options.angleUnit, { background: color })
             .raw()
             .toBuffer({ resolveWithObject: true });
     }

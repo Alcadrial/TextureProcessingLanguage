@@ -19,7 +19,7 @@ resolved to the FileSystem and the content of it's file is used.
 
 Empty is a special type that represent an image with zero dimensions, can be used only with the Range and Resize operators and a value of this type can only be references using the built-in variable "empty".
 
-Any variable is typed at initialization (may occur after declaration if using "var") and its type is fixed for its entire life-time, the only exceptions are Strings, Empties and Image, the first can change type to Image and the other two can change type to each other (conceptually a String may be resolved to an Image, an Empty is just a restricted Image)
+Any variable is typed at initialization (may occur after declaration if using "var") and its type is fixed for its entire life-time, the only exceptions are Strings, Empties and Images, the first can change type to Image and the other two can change type to each other (conceptually a String may be resolved to an Image, an Empty is just a restricted Image)
 
 ## Language Features
 
@@ -51,10 +51,12 @@ If used as assignment specify the region that will be replaced, if the range is 
 image bounds then the missing pixels are added with the given color (or transparent black if not specified).
 
 ### Resize operator
+
 `image{w,h,kernel}`<br>
 `empty{w,h,color}`
 
-color is optional (defaults to fully transparent black)
+If used on an image, this operator will scale/reduce the image to match the specified size using the specified kernel (or "cubic" if not specified).<br>
+If used on empty, this operator will create an image of the specified size and color (or transparent black if not specified)
 
 ### Rotate operator
 
@@ -69,7 +71,7 @@ missing.
 
 `image0 cop image1`
 
-where cop is one of "|>"(right), "|<"(left), "|^"(up), "|v"(down),
+where `cop` is one of "|>"(right), "|<"(left), "|^"(up), "|v"(down),
 "|<v"(left down), "|<^"(left up), "|>^"(right up), "|>v"(right down)
 
 Creates a new image by putting image1 next to image0 in the direction defined by
@@ -99,6 +101,7 @@ Makes the edge of the image sharper
 
 ### Variables
 
+- pi: The constant value of pi (3.14...)
 - empty:
 
   An image with zero size that cannot be created or modified, is used to create fixed color images of any size
@@ -107,7 +110,7 @@ Makes the edge of the image sharper
 
 - width(image): Returns the width of the given image
 - height(image): Returns the height of the given image
-- random(): Returns a pseudorandomly generated numeber between 0 and 2^32 exclusive
+- random(): Returns a pseudorandomly generated numeber between 0 and 1 inclusive
 
 ## Examples
 
@@ -115,17 +118,19 @@ In [this](examples/simple/) folder there are some example files named as "exampl
 
 ### [Example 0](examples/simple/example0.tpl)
 
-This example creates an image of 2 gears of different sizes inside a colored frame.
-It uses custom functions, if, return, concat operators, empty, the resize operator and blending
+This example explains basic usage of the language: const/var declaration,
+empty init, image size, expressions, evaluation order, image resolution.
 
 ### [Example 1](examples/simple/example1.tpl)
 
+This example creates an image of 2 gears of different sizes inside a colored frame.
+It uses custom functions, condition branching, function return, concat operators,
+advanced empty usage, resize operator and blending.
+
+### [Example 2](examples/simple/example2.tpl)
+
 This example create a random image from a TileSet.
-It uses while loops and the range operator
-
-### Example2
-
-TODO
+It uses while loops and the range operator.
 
 ## Tests
 

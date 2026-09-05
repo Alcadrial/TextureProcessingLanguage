@@ -1,52 +1,45 @@
 
-const tileSet = "Dungeon Tile Set.png";
+/*
+    Function that returns a new image that is the same of the given one
+    with a border of "size" pixels of the given color
+*/
+addBorder(image, size, color) {
+    if (size <= 0) return image;
+    return image[-size, -size -> width(image) + size, height(image) + size, color];
+}
+/*
+    Function that returns calculates a new image from the given one by
+    adding a border of the given size using 3 colors to create a shade effect
+*/
+addFrame(image, size, color0, color1, color2) {
 
-var wall = empty{192, 192};
-
-//Add background
-var i = 1;
-while (i < 11) {
-    var j = 1;
-    while (j < 11) {
-        //copy background tile using range operator
-        wall[i*16,j*16->(i+1)*16,(j+1)*16] = tileSet[10*16,5*16->11*16,6*16];
-        j += 1;
-    }
-    i += 1;
+    //check parameters
+    if (size <= 0) return image;
+    if (size == 1) return addBorder(image, 1, color1);
+    
+    var t = image;
+    //add inner border of 1px of color "color2"
+    t = addBorder(t, 1, color2);
+    //add extra border to match size of color "color1"
+    if (size > 2) t = addBorder(t, size - 2, color1);
+    //add outer border of 1px color "color0"
+    t = addBorder(t, 1, color0);
+    //return the image to the callee
+    return t;
 }
 
-//Add random images and top and bottom walls
-i = 1;
-while (i < 11) {
-    var j = 1;
-    wall[i*16,0->(i+1)*16,16] = tileSet[2*16,3*16->3*16,4*16];
-    while (j < 11) {
-        //generate random indexes
-        const ri = 1 + (random() % 13);
-        const rj = 1 + (random() % 16);
-        wall[i*16,j*16->(i+1)*16,(j+1)*16] = tileSet[ri*16,rj*16->(ri+1)*16,(rj+1)*16];
-        j += 1;
-    }
-    wall[i*16,11*16->(i+1)*16,12*16] = tileSet[2*16,16->3*16,2*16];
+//bind variables to images from the FS, the images must have an empty background, possibly black
+const littleGear = "icon28.png";
+const bigGear = "icon31.png";
 
-    i += 1;
-}
+//compose the gears toghether with "littleGear" to the lower left corner and
+//"bigGear" to the upper right corner, with an empty black background
+var image = (littleGear |>^ empty{24,24}) + (bigGear |<v empty{8,8});
 
-//Add left and right walls
-i = 0;
-while (i < 2) {
-    var j = 1;
-    while (j < 11) {
-        wall[11*i*16,j*16->(1+11*i)*16,(j+1)*16] = tileSet[(3-2*i)*16,2*16->(4-2*i)*16,3*16];
-        j += 1;
-    }
-    i += 1;
-}
+//compute the background of the right size using the built-in functions "width" and "height"
+const background = empty{width(image), height(image), "#292929"};
+//and add it to the image using the blending operator
+image = background ** image;
 
-//Add corners walls
-wall[0*16,0*16->1*16,1*16] = tileSet[6*16,3*16->7*16,4*16];
-wall[11*16,0*16->12*16,1*16] = tileSet[5*16,3*16->6*16,4*16];
-wall[11*16,11*16->12*16,12*16] = tileSet[5*16,2*16->6*16,3*16];
-wall[0*16,11*16->1*16,12*16] = tileSet[6*16,2*16->7*16,3*16];
-
-return wall;
+//add a frame of 8px and return
+return addFrame(image, 8, "#ecbb48", "#E6A40E", "#a1740b");
