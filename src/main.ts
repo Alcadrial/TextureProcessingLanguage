@@ -60,7 +60,7 @@ interface Assignment extends Token {
     init: Expr;
 }
 interface Call extends Token {
-    id: Identifier;
+    functionId: Identifier;
     args: Expr[];
 }
 interface WhileLike extends Token {
@@ -87,10 +87,7 @@ interface OperationExpr extends Expr {
     op: string;
     exprs: Expr[];
 }
-interface CallExpr extends Expr {
-    functionId: Identifier;
-    args: Expr[];
-}
+interface CallExpr extends Expr, Call { }
 interface IdExpr extends Expr {
     id: Identifier;
 }
@@ -279,7 +276,7 @@ class AstBuilder {
                         return {
                             type: "call",
                             debugData: this.getDebugData(commandToken),
-                            id: this.buildAst(commandToken.children[0]),
+                            functionId: this.buildAst(commandToken.children[0]),
                             args: commandToken.children[1].children.map(t => this.buildAstExpr(t))
                         } as Call;
                     case "WhileLike":
@@ -517,39 +514,25 @@ type EnvironmentFunction = {
 
 class Environment {
 
-    private operations: { [key: string]: { operation: (args: any[]) => any, outputType: Type } };
-    private functions: { [key: string]: EnvironmentFunction };
+    private functions: { [key: string]: EnvironmentFunction | undefined };
 
     constructor(environment?: Environment) {
         if (environment) {
             //copy all denotable values
-            this.operations = { ...environment.operations };
             this.functions = { ...environment.functions };
         }
         else {
-            this.operations = {};
             this.functions = {};
         }
     }
 
-    bindOperation(name: string, inputTypes: Type[], outputType: Type, op: (args: any[]) => any) {
-        this.operations[`${name} ${inputTypes}`] = {
-            operation: op,
-            outputType
-        };
-    }
-
-    lookupOperation(name: string, inputTypes: Type[]) {
-        return this.operations[`${name} ${inputTypes}`];
-    }
-
-    bindFunctions(name: string, f: EnvironmentFunction, context: Context) {
+    bind(name: string, f: EnvironmentFunction, context: Context): void {
         if (this.functions[name]) context.throw(`Cannot replace previous defined function "${name}"`);
         this.functions[name] = f;
     }
 
-    lookupFunction(name: string) {
-        return this.functions[name];
+    lookup(name: string, inputTypes?: Type[]): EnvironmentFunction | undefined {
+        return this.functions[name + (inputTypes ? `${name} ${inputTypes}` : "")];
     }
 }
 
@@ -687,88 +670,81 @@ class Engine {
 
     constructor(options: { path?: string, debug?: boolean, angleUnit?: number }) {
         this.context = new Context();
+        const c = this.context;
         (e => {
-            e.bindOperation("!", [Type.BOOLEAN], Type.BOOLEAN, ([v]) => !v);
-            e.bindOperation("-", [Type.NUMBER], Type.NUMBER, ([v]) => -v);
-            e.bindOperation("|", [Type.IMAGE], Type.IMAGE, async ([v]) => await this.applyFlop(v));
-            e.bindOperation("#", [Type.IMAGE], Type.IMAGE, async ([v]) => await this.applySharpen(v));
+            e.bindOp("!", [Type.BOOLEAN], Type.BOOLEAN, ([v]) => !v);
+            e.bindOp("-", [Type.NUMBER], Type.NUMBER, ([v]) => -v);
+            e.bindOp("|", [Type.IMAGE], Type.IMAGE, async ([v]) => await this.applyFlop(v));
+            e.bindOp("#", [Type.IMAGE], Type.IMAGE, async ([v]) => await this.applySharpen(v));
 
-            e.bindOperation("==", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v == w);
-            e.bindOperation("==", [Type.BOOLEAN, Type.BOOLEAN], Type.BOOLEAN, ([v, w]) => v == w);
-            e.bindOperation("!=", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v != w);
-            e.bindOperation("!=", [Type.BOOLEAN, Type.BOOLEAN], Type.BOOLEAN, ([v, w]) => v != w);
-            e.bindOperation(">=", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v >= w);
-            e.bindOperation(">", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v > w);
-            e.bindOperation("<=", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v <= w);
-            e.bindOperation("<", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v < w);
-            e.bindOperation("&&", [Type.BOOLEAN, Type.BOOLEAN], Type.BOOLEAN, ([v, w]) => v && w);
-            e.bindOperation("||", [Type.BOOLEAN, Type.BOOLEAN], Type.BOOLEAN, ([v, w]) => v || w);
-            e.bindOperation("+", [Type.NUMBER, Type.NUMBER], Type.NUMBER, ([v, w]) => v + w);
-            e.bindOperation("-", [Type.NUMBER, Type.NUMBER], Type.NUMBER, ([v, w]) => v - w);
-            e.bindOperation("*", [Type.NUMBER, Type.NUMBER], Type.NUMBER, ([v, w]) => v * w);
-            e.bindOperation("/", [Type.NUMBER, Type.NUMBER], Type.NUMBER, ([v, w]) => v / w);
-            e.bindOperation("%", [Type.NUMBER, Type.NUMBER], Type.NUMBER, ([v, w]) => v % w);
+            e.bindOp("==", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v == w);
+            e.bindOp("==", [Type.BOOLEAN, Type.BOOLEAN], Type.BOOLEAN, ([v, w]) => v == w);
+            e.bindOp("!=", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v != w);
+            e.bindOp("!=", [Type.BOOLEAN, Type.BOOLEAN], Type.BOOLEAN, ([v, w]) => v != w);
+            e.bindOp(">=", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v >= w);
+            e.bindOp(">", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v > w);
+            e.bindOp("<=", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v <= w);
+            e.bindOp("<", [Type.NUMBER, Type.NUMBER], Type.BOOLEAN, ([v, w]) => v < w);
+            e.bindOp("&&", [Type.BOOLEAN, Type.BOOLEAN], Type.BOOLEAN, ([v, w]) => v && w);
+            e.bindOp("||", [Type.BOOLEAN, Type.BOOLEAN], Type.BOOLEAN, ([v, w]) => v || w);
+            e.bindOp("+", [Type.NUMBER, Type.NUMBER], Type.NUMBER, ([v, w]) => v + w);
+            e.bindOp("-", [Type.NUMBER, Type.NUMBER], Type.NUMBER, ([v, w]) => v - w);
+            e.bindOp("*", [Type.NUMBER, Type.NUMBER], Type.NUMBER, ([v, w]) => v * w);
+            e.bindOp("/", [Type.NUMBER, Type.NUMBER], Type.NUMBER, ([v, w]) => v / w);
+            e.bindOp("%", [Type.NUMBER, Type.NUMBER], Type.NUMBER, ([v, w]) => v % w);
 
-            e.bindOperation("+", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyElementWiseOperation((c0, c1) => c0 + c1, "+", [v, w]));
-            e.bindOperation("-", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyElementWiseOperation((c0, c1) => c0 - c1, "-", [v, w]));
-            e.bindOperation("*", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyElementWiseOperation((c0, c1) => c0 * c1, "*", [v, w]));
-            e.bindOperation("/", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyElementWiseOperation((c0, c1) => c0 / c1, "/", [v, w]));
-            e.bindOperation("%", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyElementWiseOperation((c0, c1) => c0 % c1, "%", [v, w]));
-            e.bindOperation("**", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyBlending(v, w));
+            e.bindOp("+", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyElementWiseOperation((c0, c1) => c0 + c1, "+", [v, w]));
+            e.bindOp("-", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyElementWiseOperation((c0, c1) => c0 - c1, "-", [v, w]));
+            e.bindOp("*", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyElementWiseOperation((c0, c1) => c0 * c1, "*", [v, w]));
+            e.bindOp("/", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyElementWiseOperation((c0, c1) => c0 / c1, "/", [v, w]));
+            e.bindOp("%", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyElementWiseOperation((c0, c1) => c0 % c1, "%", [v, w]));
+            e.bindOp("**", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyBlending(v, w));
 
-            e.bindOperation("@", [Type.IMAGE, Type.NUMBER], Type.IMAGE, async ([v, i]) => await this.applyRotation(v, i));
-            e.bindOperation("!@", [Type.IMAGE, Type.NUMBER], Type.IMAGE, async ([v, i]) => await this.applyRotation(v, -i));
+            e.bindOp("@", [Type.IMAGE, Type.NUMBER], Type.IMAGE, async ([v, i]) => await this.applyRotation(v, i));
+            e.bindOp("!@", [Type.IMAGE, Type.NUMBER], Type.IMAGE, async ([v, i]) => await this.applyRotation(v, -i));
 
-            e.bindOperation("|<", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, -1, 0));
-            e.bindOperation("|>", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, 1, 0));
-            e.bindOperation("|v", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, 0, 1));
-            e.bindOperation("|^", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, 0, -1));
-            e.bindOperation("|<^", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, -1, -1));
-            e.bindOperation("|<v", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, -1, 1));
-            e.bindOperation("|>v", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, 1, 1));
-            e.bindOperation("|>^", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, 1, -1));
+            e.bindOp("|<", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, -1, 0));
+            e.bindOp("|>", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, 1, 0));
+            e.bindOp("|v", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, 0, 1));
+            e.bindOp("|^", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, 0, -1));
+            e.bindOp("|<^", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, -1, -1));
+            e.bindOp("|<v", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, -1, 1));
+            e.bindOp("|>v", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, 1, 1));
+            e.bindOp("|>^", [Type.IMAGE, Type.IMAGE], Type.IMAGE, async ([v, w]) => await this.applyConcat(v, w, 1, -1));
 
-            e.bindOperation("[->]", [Type.IMAGE, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.NUMBER], Type.IMAGE, async ([v, x0, y0, x1, y1]) => await this.applyRange(v, { from: { x: x0, y: y0 }, to: { x: x1, y: y1 } }, "#00000000"));
-            e.bindOperation("[->]", [Type.IMAGE, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.STRING], Type.IMAGE, async ([v, x0, y0, x1, y1, c]) => await this.applyRange(v, { from: { x: x0, y: y0 }, to: { x: x1, y: y1 } }, c));
-            e.bindOperation("[->]", [Type.EMPTY, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.NUMBER], Type.IMAGE, async ([, x0, y0, x1, y1]) => await this.createBlankImage(x1 - x0, y1 - y0));
-            e.bindOperation("[->]", [Type.EMPTY, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.STRING], Type.IMAGE, async ([, x0, y0, x1, y1, c]) => await this.createBlankImage(x1 - x0, y1 - y0, c));
-            e.bindOperation("{}", [Type.IMAGE, Type.NUMBER, Type.NUMBER], Type.IMAGE, async ([v, w, h]) => await this.applyResize(v, w, h, "nearest"));
-            e.bindOperation("{}", [Type.IMAGE, Type.NUMBER, Type.NUMBER, Type.STRING], Type.IMAGE, async ([v, w, h, s]) => await this.applyResize(v, w, h, s));
-            e.bindOperation("{}", [Type.EMPTY, Type.NUMBER, Type.NUMBER], Type.IMAGE, async ([, w, h]) => await this.createBlankImage(w, h));
-            e.bindOperation("{}", [Type.EMPTY, Type.NUMBER, Type.NUMBER, Type.STRING], Type.IMAGE, async ([, w, h, s]) => await this.createBlankImage(w, h, s));
+            e.bindOp("[->]", [Type.IMAGE, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.NUMBER], Type.IMAGE, async ([v, x0, y0, x1, y1]) => await this.applyRange(v, { from: { x: x0, y: y0 }, to: { x: x1, y: y1 } }, "#00000000"));
+            e.bindOp("[->]", [Type.IMAGE, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.STRING], Type.IMAGE, async ([v, x0, y0, x1, y1, c]) => await this.applyRange(v, { from: { x: x0, y: y0 }, to: { x: x1, y: y1 } }, c));
+            e.bindOp("[->]", [Type.EMPTY, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.NUMBER], Type.IMAGE, async ([, x0, y0, x1, y1]) => await this.createBlankImage(x1 - x0, y1 - y0));
+            e.bindOp("[->]", [Type.EMPTY, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.NUMBER, Type.STRING], Type.IMAGE, async ([, x0, y0, x1, y1, c]) => await this.createBlankImage(x1 - x0, y1 - y0, c));
+            e.bindOp("{}", [Type.IMAGE, Type.NUMBER, Type.NUMBER], Type.IMAGE, async ([v, w, h]) => await this.applyResize(v, w, h, "nearest"));
+            e.bindOp("{}", [Type.IMAGE, Type.NUMBER, Type.NUMBER, Type.STRING], Type.IMAGE, async ([v, w, h, s]) => await this.applyResize(v, w, h, s));
+            e.bindOp("{}", [Type.EMPTY, Type.NUMBER, Type.NUMBER], Type.IMAGE, async ([, w, h]) => await this.createBlankImage(w, h));
+            e.bindOp("{}", [Type.EMPTY, Type.NUMBER, Type.NUMBER, Type.STRING], Type.IMAGE, async ([, w, h, s]) => await this.createBlankImage(w, h, s));
 
-            e.bindFunctions("width", {
-                builtin: true,
-                types: [Type.IMAGE],
-                returnType: Type.NUMBER,
-                handle: ([image]) => image.info.width
-            }, this.context);
-            e.bindFunctions("height", {
-                builtin: true,
-                types: [Type.IMAGE],
-                returnType: Type.NUMBER,
-                handle: ([image]) => image.info.height
-            }, this.context);
-            e.bindFunctions("random", {
-                builtin: true,
-                types: [],
-                returnType: Type.NUMBER,
-                handle: () => randomInt(2 ** 32) / (2 ** 32)
-            }, this.context);
-            e.bindFunctions("floor", {
-                builtin: true,
-                types: [Type.NUMBER],
-                returnType: Type.NUMBER,
-                handle: ([n]) => Math.floor(n)
-            }, this.context);
-            e.bindFunctions("ceil", {
-                builtin: true,
-                types: [Type.NUMBER],
-                returnType: Type.NUMBER,
-                handle: ([n]) => Math.ceil(n)
-            }, this.context);
+            e.bind("width", [Type.IMAGE], Type.NUMBER, ([image]) => image.info.width);
+            e.bind("height", [Type.IMAGE], Type.NUMBER, ([image]) => image.info.height);
+            e.bind("random", [], Type.NUMBER, () => randomInt(2 ** 32) / (2 ** 32));
+            e.bind("floor", [Type.NUMBER], Type.NUMBER, ([n]) => Math.floor(n));
+            e.bind("ceil", [Type.NUMBER], Type.NUMBER, ([n]) => Math.ceil(n));
+        })({
+            bindOp(name: string, inputTypes: Type[], outputType: Type, op: (args: any[]) => any): void {
+                c.scope.environment.bind(name + (inputTypes ? `${name} ${inputTypes}` : ""), {
+                    builtin: true,
+                    types: inputTypes,
+                    returnType: outputType,
+                    handle: op
+                }, c);
+            },
 
-        })(this.context.scope.environment);
+            bind(name: string, inputTypes: Type[], outputType: Type, f: (args: any[]) => any): void {
+                c.scope.environment.bind(name, {
+                    builtin: true,
+                    types: inputTypes,
+                    returnType: outputType,
+                    handle: f
+                }, c);
+            }
+        });
 
         options = { ...options };
         if (!options.path?.endsWith("/")) options.path += "/";
@@ -819,6 +795,7 @@ class Engine {
                 }
                 const result = await this.execute(returnToken.expr);
                 if (!result) return;
+                //resolve image before exiting
                 if (this.context.scope.type == ScopeType.GLOBAL) {
                     if (result.type == Type.STRING) {
                         result.value = await this.loadImage(result.value);
@@ -899,66 +876,36 @@ class Engine {
                 break;
             }
             case "call": {
-                const callToken = token as Call;
-                const [args, types] = await this.executeExprs(callToken.args);
-                const f = this.context.scope.environment.lookupFunction(callToken.id);
-                if (f === undefined) this.context.throw(`Function ${callToken.id} not found`);
-                if (f.builtin) {
-                    if (types.find((v, i) => v != f.types[i])) {
-                        const toResolve: string[] = [];
-                        for (const i in types) if (types[i] == Type.STRING) {
-                            types[i] = Type.IMAGE;
-                            toResolve.push(i);
-                            if (f.types == types) break;
-                        }
-                        if (types.find((v, i) => v != f.types[i])) this.context.throw(`Cannot call function ${callToken.id} for types ${types.map(getTypeName)}`);
-                        for (const i of toResolve) {
-                            args[i] = await this.loadImage(args[i]);
-                        }
-                    }
-                    return {
-                        type: f.returnType,
-                        value: f.handle(args)
-                    };
-                }
-
-                return await this.executeCommands(ScopeType.CLOSURE, f.commands, callToken.id, async state => {
-                    for (const i in f.args) {
-                        state.replaceVariable(f.args[i], args[i], types[i], false, this.context);
-                    }
-                });
+                return this.executeCall(token as Call);
             }
             case "while": {
                 const whileToken = token as WhileLike;
-                let condition = await this.execute(whileToken.condition);
-                if (!condition) return this.context.throw("The condition of a while-statement must return a value");
-                if (condition.type != Type.BOOLEAN) this.context.throw(`Value of type ${getTypeName(condition.type)} cannot be casted to boolean`);
+                while (true) {
+                    const condition = await this.execute(whileToken.condition);
+                    if (!condition) return this.context.throw("The condition of a while-statement must return a value");
+                    if (condition.type != Type.BOOLEAN) this.context.throw(`Value of type ${getTypeName(condition.type)} cannot be casted to boolean`);
+                    if (!condition.value) break;
 
-                while (condition.value) {
                     let result = await this.executeCommands(ScopeType.LOOP, whileToken.commands, "while");
                     if (this.context.scope.return) return result;
                     if (this.context.scope.break) break;
-
-                    condition = await this.execute(whileToken.condition);
-                    if (!condition) return this.context.throw("The condition of a while-statement must return a value");
-                    if (condition.type != Type.BOOLEAN) this.context.throw(`Value of type ${getTypeName(condition.type)} cannot be casted to boolean`);
                 }
                 this.context.scope.break = undefined;
                 break;
             }
             case "loopFlowCommand": {
                 switch ((token as LoopCommand).kind) {
-                    case "continue": {
+                    case "continue":
                         if (this.context.scope.type != ScopeType.LOOP) this.context.throw("Cannot continue outside a loop");
                         this.context.scope.isRunning = false;
                         break;
-                    }
-                    case "break": {
+                    case "break":
                         if (this.context.scope.type != ScopeType.LOOP) this.context.throw("Cannot break outside a loop");
                         this.context.scope.isRunning = false;
                         this.context.scope.higherScope!.break = true;
                         break;
-                    }
+                    default:
+                        this.context.throw(`Unknown loop command token '${(token as LoopCommand).kind}'`);
                 }
             }
             case "if": {
@@ -974,7 +921,7 @@ class Engine {
                 return await this.executeCommands(ScopeType.CLOSURE, (token as Closure).commands, "closure");
             case "function": {
                 const functionToken = token as Function;
-                this.context.scope.environment.bindFunctions(functionToken.id, {
+                this.context.scope.environment.bind(functionToken.id, {
                     builtin: false,
                     args: functionToken.args,
                     commands: functionToken.commands
@@ -994,66 +941,38 @@ class Engine {
                         if (variable.type === null) return this.context.throw(`Variable ${variable.name} has not been initialized yet`);
                         return { value: null, ...variable };
                     }
-                    case "call": {
-                        const callToken = token as CallExpr;
-                        const [args, types] = await this.executeExprs(callToken.args);
-                        const f = this.context.scope.environment.lookupFunction(callToken.functionId);
-                        if (f === undefined) this.context.throw(`Function ${callToken.functionId} not found`);
-                        if (f.builtin) {
-                            if (types.find((v, i) => v != f.types[i])) {
-                                const toResolve: string[] = [];
-                                for (const i in types) if (types[i] == Type.STRING) {
-                                    types[i] = Type.IMAGE;
-                                    toResolve.push(i);
-                                    if (f.types == types) break;
-                                }
-                                if (types.find((v, i) => v != f.types[i])) this.context.throw(`Cannot call function ${callToken.functionId} for types ${types.map(getTypeName)}`);
-                                for (const i of toResolve) {
-                                    args[i] = await this.loadImage(args[i]);
-                                }
-                            }
-                            return {
-                                type: f.returnType,
-                                value: f.handle(args)
-                            };
-                        }
-
-                        const result = await this.executeCommands(ScopeType.CLOSURE, f.commands, callToken.functionId, async state => {
-                            for (const i in f.args) {
-                                state.replaceVariable(f.args[i], args[i], types[i], false, this.context);
-                            }
-                        });
-                        if (result === null) this.context.throw(`Missing return statement after executing function ${callToken.functionId}`);
-                        return result;
-                    }
+                    case "call":
+                        return this.executeCall(token as Call) ?? void this.context.throw(`Missing return statement after executing function ${(token as Call).functionId}`);
                     case "closure":
                         return await this.executeCommands(ScopeType.CLOSURE, (token as ClosureExpr).commands, "closure");
                     case "operation": {
                         const operationToken = token as OperationExpr;
                         const [args, types] = await this.executeExprs(operationToken.exprs);
-                        var o = this.context.scope.environment.lookupOperation(operationToken.op, types);
+                        var o = this.context.scope.environment.lookup(operationToken.op, types);
                         //try to resolve strings to images to find a matching operator
                         if (o == null) {
                             const toResolve: string[] = [];
                             for (const i in types) if (types[i] == Type.STRING) {
                                 types[i] = Type.IMAGE;
                                 toResolve.push(i);
-                                o = this.context.scope.environment.lookupOperation(operationToken.op, types);
+                                o = this.context.scope.environment.lookup(operationToken.op, types);
                                 if (o != null) break;
                             }
-                            if (o == null) this.context.throw(`Unknown operation ${operationToken.op} for types ${types.map(getTypeName)}`);
+                            if (o == null) return this.context.throw(`Unknown operation ${operationToken.op} for types ${types.map(getTypeName)}`);
+                            if (!o.builtin) return this.context.throw("User defined operations are not allowed");
                             for (const i of toResolve) {
                                 args[i] = await this.loadImage(args[i]);
                             }
                         }
+                        if (!o.builtin) return this.context.throw("User defined operations are not allowed");
+
                         return {
-                            value: await o.operation(args),
-                            type: o.outputType
+                            value: await o.handle(args),
+                            type: o.returnType
                         };
                     }
                     default:
                         this.context.throw(`Unknown expr token '${(token as Expr).exprType}'`);
-                        break;
                 }
             default:
                 this.context.throw(`Unknown command token '${token.type}'`);
@@ -1089,6 +1008,37 @@ class Engine {
             types.push(result.type);
         }
         return [args, types];
+    }
+
+    async executeCall(call: Call): Promise<Variable | undefined> {
+        const [args, types] = await this.executeExprs(call.args);
+        const f = this.context.scope.environment.lookup(call.functionId);
+        if (!f) return this.context.throw(`Function ${call.functionId} not found`);
+        if (f.builtin) {
+            //find a matching function by resolving strings to images
+            if (types.find((v, i) => v != f.types[i])) {
+                const toResolve: string[] = [];
+                for (const i in types) if (types[i] == Type.STRING) {
+                    types[i] = Type.IMAGE;
+                    toResolve.push(i);
+                    if (f.types == types) break;
+                }
+                if (types.find((v, i) => v != f.types[i])) this.context.throw(`Cannot call function ${call.functionId} for types ${types.map(getTypeName)}`);
+                for (const i of toResolve) {
+                    args[i] = await this.loadImage(args[i]);
+                }
+            }
+            return {
+                type: f.returnType,
+                value: f.handle(args)
+            };
+        }
+
+        return await this.executeCommands(ScopeType.CLOSURE, f.commands, call.functionId, async state => {
+            for (const i in f.args) {
+                state.replaceVariable(f.args[i], args[i], types[i], false, this.context);
+            }
+        });
     }
 
     async createBlankImage(width: number, height: number, color: ColorLike = "#00000000"): Promise<Image> {
